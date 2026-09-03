@@ -22,6 +22,7 @@ import { createConflictDetector }                            from './coordinatio
 import { createMovementController }                          from './robots/robotMovement.js';
 import { setupRobotDrag }                                    from './robots/robotDrag.js';
 import { createUIController }                                from './ui/robotControls.js';
+import { setupMapControls }                                   from './ui/mapControls.js';
 import { CONFLICT_TIME_THRESHOLD }                           from './config/constants.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,6 +166,43 @@ class WarehouseScene extends Phaser.Scene {
     camera.setZoom(fitZoom);
     camera.centerOn(mapWidthPx / 2, mapHeightPx / 2);
 
+    // Viewport boundaries: prevent camera from panning far outside warehouse map
+    const boundMargin = 128; // ~4 tiles buffer
+    camera.setBounds(
+      -boundMargin,
+      -boundMargin,
+      mapWidthPx + boundMargin * 2,
+      mapHeightPx + boundMargin * 2
+    );
+
+    // Dynamic zoom limits relative to current fit zoom
+    const getMinZoom = () => calculateFitZoom() * 0.85;
+    const getMaxZoom = () => calculateFitZoom() * 4.0;
+    const ZOOM_STEP  = 1.25;
+
+    const zoomIn = () => {
+      const targetZoom = Phaser.Math.Clamp(camera.zoom * ZOOM_STEP, getMinZoom(), getMaxZoom());
+      camera.setZoom(targetZoom);
+    };
+
+    const zoomOut = () => {
+      const targetZoom = Phaser.Math.Clamp(camera.zoom / ZOOM_STEP, getMinZoom(), getMaxZoom());
+      camera.setZoom(targetZoom);
+    };
+
+    const resetView = () => {
+      const currentFitZoom = calculateFitZoom();
+      camera.setZoom(currentFitZoom);
+      camera.centerOn(mapWidthPx / 2, mapHeightPx / 2);
+    };
+
+    // Wire interactive DOM map controls (+, −, Reset)
+    setupMapControls({
+      onZoomIn: zoomIn,
+      onZoomOut: zoomOut,
+      onResetView: resetView
+    });
+
     let isDragging    = false;
     let pointerDownPos = { x: 0, y: 0 };
 
@@ -207,9 +245,18 @@ class WarehouseScene extends Phaser.Scene {
 
     this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY) => {
       const zoomFactor = 1.15;
+      const minZoom = getMinZoom();
+      const maxZoom = getMaxZoom();
       let newZoom = deltaY > 0 ? camera.zoom / zoomFactor : camera.zoom * zoomFactor;
-      newZoom = Phaser.Math.Clamp(newZoom, fitZoom * 0.5, 3.5);
-      camera.setZoom(newZoom);
+      newZoom = Phaser.Math.Clamp(newZoom, minZoom, maxZoom);
+
+      if (newZoom !== camera.zoom) {
+        const worldPointBefore = camera.getWorldPoint(pointer.x, pointer.y);
+        camera.setZoom(newZoom);
+        const worldPointAfter = camera.getWorldPoint(pointer.x, pointer.y);
+        camera.scrollX += worldPointBefore.x - worldPointAfter.x;
+        camera.scrollY += worldPointBefore.y - worldPointAfter.y;
+      }
     });
 
     this.scale.on('resize', (gameSize) => {
@@ -217,6 +264,12 @@ class WarehouseScene extends Phaser.Scene {
       const newFitZoom = calculateFitZoom();
       camera.setZoom(newFitZoom);
       camera.centerOn(mapWidthPx / 2, mapHeightPx / 2);
+      camera.setBounds(
+        -boundMargin,
+        -boundMargin,
+        mapWidthPx + boundMargin * 2,
+        mapHeightPx + boundMargin * 2
+      );
     });
 
     // ── window.* debug exports (preserved from original) ─────────────────────
@@ -238,6 +291,9 @@ class WarehouseScene extends Phaser.Scene {
     window.setDestination            = (tileX, tileY) =>
       setRobotDestination(uiController.getSelectedRobotId(), tileX, tileY);
     window.selectRobot               = (id) => uiController.selectRobot(id);
+    window.zoomIn                    = zoomIn;
+    window.zoomOut                   = zoomOut;
+    window.resetView                 = resetView;
   }
 }
 

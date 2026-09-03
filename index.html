@@ -46,6 +46,16 @@
             <span class="map-viewport-dot"></span>
             Warehouse Map · 60 × 40
           </div>
+
+          <!-- Interactive Viewport Controls (Top Right Overlay) -->
+          <div class="map-viewport-controls" id="map-viewport-controls" aria-label="Map Viewport Controls">
+            <div class="map-controls-btn-row">
+              <button class="map-ctrl-btn" id="btn-zoom-in" title="Zoom In (+)" aria-label="Zoom In">+</button>
+              <button class="map-ctrl-btn" id="btn-zoom-out" title="Zoom Out (−)" aria-label="Zoom Out">−</button>
+            </div>
+            <button class="map-ctrl-btn map-ctrl-btn-reset" id="btn-reset-view" title="Reset View" aria-label="Reset View">Reset</button>
+          </div>
+
           <!-- Phaser mounts its canvas here — parent: 'game-container' in main.js -->
           <div id="game-container"></div>
         </div>
