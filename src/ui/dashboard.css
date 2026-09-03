@@ -197,6 +197,7 @@ html, body {
   align-items: center;
   justify-content: flex-start;
   padding: var(--space-md) var(--space-md) var(--space-md) var(--space-xl);
+  gap: var(--space-lg);
 }
 
 /* ─── Compact Map Frame (3:2 aspect ratio viewport) ──────────────────────── */
@@ -218,6 +219,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 /* Subtle HUD tag inside map frame */
@@ -330,6 +332,130 @@ html, body {
   display: block;
 }
 
+/* ─── Auxiliary Live Fleet Overview Rail ─────────────────────────────────── */
+#fleet-overview-rail {
+  width: 130px;
+  flex-shrink: 0;
+  background: rgba(20, 23, 34, 0.88);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  user-select: none;
+}
+
+.overview-rail-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.overview-rail-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  flex-shrink: 0;
+}
+
+.overview-rail-title {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+  white-space: nowrap;
+}
+
+.overview-metric-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: center;
+}
+
+.overview-metric-label {
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.overview-metric-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-metric-val .ov-unit {
+  font-size: 8.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-left: 2px;
+}
+
+.overview-metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.overview-submetric {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  align-items: center;
+  text-align: center;
+}
+
+.overview-submetric-label {
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.overview-submetric-val {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.val-active    { color: #00e5ff; }
+.val-moving    { color: #fbbf24; }
+.val-idle      { color: #38bdf8; }
+.val-completed { color: #34d399; }
+.val-conflicts { color: #94a3b8; }
+.val-conflicts.has-conflicts { color: #ef4444; font-weight: 800; }
+
+.overview-conflict-card {
+  padding: 4px 8px;
+}
+
+@media (max-width: 1100px) {
+  #fleet-overview-rail {
+    display: none;
+  }
+}
+
 /* ─── Fleet Management Panel (right column) ──────────────────────────────── */
 #fleet-panel {
   grid-area: fleet;
@@ -338,6 +464,7 @@ html, body {
   background: var(--color-bg-panel);
   overflow: hidden;
   flex-shrink: 0;
+  height: 100%;
 }
 
 .panel-header {
@@ -354,7 +481,22 @@ html, body {
   color: var(--color-text-label);
 }
 
-.panel-body {
+/* Fixed top controls bar within fleet panel */
+.panel-fixed-controls {
+  position: relative;
+  z-index: 10;
+  padding: var(--space-md) var(--space-lg) var(--space-sm) var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+  background: var(--color-bg-panel);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Single clean scrollable region for all management content */
+.panel-scroll-content {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-md) var(--space-lg);
@@ -364,11 +506,14 @@ html, body {
   min-height: 0;
 }
 
-.panel-body::-webkit-scrollbar { width: 4px; }
-.panel-body::-webkit-scrollbar-track { background: transparent; }
-.panel-body::-webkit-scrollbar-thumb {
+.panel-scroll-content::-webkit-scrollbar { width: 4px; }
+.panel-scroll-content::-webkit-scrollbar-track { background: transparent; }
+.panel-scroll-content::-webkit-scrollbar-thumb {
   background: var(--color-border);
   border-radius: 2px;
+}
+.panel-scroll-content::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
 }
 
 /* ── Fleet Actions & Counter (Add Robot) ─────────────────────────────────── */
@@ -485,15 +630,6 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  max-height: 220px;
-  overflow-y: auto;
-  padding-right: 2px;
-}
-
-#robot-selector::-webkit-scrollbar { width: 3px; }
-#robot-selector::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 2px;
 }
 
 .robot-card {
@@ -628,32 +764,188 @@ html, body {
   color: var(--color-text-primary);
 }
 
-/* ── Active robot status block ──────────────────────────────────────────── */
-.active-robot-block {
+/* ── Robot Configuration Section ────────────────────────────────────────── */
+.config-empty-card {
+  background: var(--color-bg-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md) var(--space-sm);
+  text-align: center;
+}
+
+.config-empty-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 2px;
+}
+
+.config-empty-hint {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.config-card {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: var(--space-md);
+  padding: 10px var(--space-md);
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 8px;
 }
 
-.active-robot-row {
+.config-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.config-robot-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.config-status-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+}
+
+.config-row-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.config-label {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.config-input {
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+
+.config-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent-dim);
+}
+
+.config-select {
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 6px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+
+.config-select:focus {
+  border-color: var(--color-accent);
+}
+
+.config-select option {
+  background: #181c27;
+  color: var(--color-text-primary);
+}
+
+.config-battery-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-#active-robot-name {
+.config-battery-val {
+  font-size: 10px;
   font-weight: 700;
-  font-size: 13px;
-  color: var(--color-accent);
+  color: #34d399;
+  font-variant-numeric: tabular-nums;
 }
 
-#robot-status-text {
-  font-size: 11px;
+.config-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background: #334155;
+  outline: none;
+  cursor: pointer;
+  margin: 3px 0;
+}
+
+.config-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0, 180, 216, 0.6);
+  transition: transform 0.08s;
+}
+
+.config-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.config-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0, 180, 216, 0.6);
+}
+
+.config-pos-val {
+  background: var(--color-bg-input);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Fleet conflicts list ─────────────────────────────────────────────────── */

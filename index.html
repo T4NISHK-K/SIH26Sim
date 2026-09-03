@@ -59,18 +59,55 @@
           <!-- Phaser mounts its canvas here — parent: 'game-container' in main.js -->
           <div id="game-container"></div>
         </div>
+
+        <!-- Auxiliary Live Fleet Overview Rail (Compact monitoring panel) -->
+        <aside id="fleet-overview-rail" aria-label="Live Fleet Overview">
+          <div class="overview-rail-header">
+            <span class="overview-rail-dot"></span>
+            <span class="overview-rail-title">Live Fleet Overview</span>
+          </div>
+
+          <div class="overview-metric-card">
+            <span class="overview-metric-label">Fleet</span>
+            <span class="overview-metric-val" id="ov-fleet-val">0 <span class="ov-unit">ROBOTS</span></span>
+          </div>
+
+          <div class="overview-metric-grid">
+            <div class="overview-submetric">
+              <span class="overview-submetric-label">Active</span>
+              <span class="overview-submetric-val val-active" id="ov-active-val">0</span>
+            </div>
+            <div class="overview-submetric">
+              <span class="overview-submetric-label">Moving</span>
+              <span class="overview-submetric-val val-moving" id="ov-moving-val">0</span>
+            </div>
+            <div class="overview-submetric">
+              <span class="overview-submetric-label">Idle</span>
+              <span class="overview-submetric-val val-idle" id="ov-idle-val">0</span>
+            </div>
+            <div class="overview-submetric">
+              <span class="overview-submetric-label">Completed</span>
+              <span class="overview-submetric-val val-completed" id="ov-completed-val">0</span>
+            </div>
+          </div>
+
+          <div class="overview-metric-card overview-conflict-card">
+            <span class="overview-metric-label">Conflicts</span>
+            <span class="overview-metric-val val-conflicts" id="ov-conflicts-val">0</span>
+          </div>
+        </aside>
       </section>
 
       <!-- 2b. FLEET MANAGEMENT PANEL (right) -->
       <aside id="fleet-panel" aria-label="Robot Management">
 
+        <!-- Fixed Header -->
         <div class="panel-header">
           <span class="panel-title">Robot Management</span>
         </div>
 
-        <div class="panel-body">
-
-          <!-- Add Robot and Fleet Count Section -->
+        <!-- Fixed Top Controls -->
+        <div class="panel-fixed-controls">
           <div class="fleet-actions-section">
             <button id="btn-add-robot" class="add-robot-btn" type="button">+ ADD ROBOT</button>
             <div class="fleet-count-box">
@@ -79,8 +116,12 @@
             </div>
           </div>
           <div id="fleet-limit-notice" class="fleet-limit-notice" style="display: none;">Fleet limit reached</div>
+        </div>
 
-          <!-- Robot selector -->
+        <!-- Scrollable Management Content -->
+        <div class="panel-scroll-content">
+
+          <!-- Robot selector (Fleet Cards) -->
           <div class="fleet-section">
             <span class="section-label">Select Robot</span>
             <div id="robot-selector">
@@ -88,21 +129,73 @@
             </div>
           </div>
 
-          <!-- Active robot status -->
-          <div class="fleet-section">
-            <span class="section-label">Active Robot</span>
-            <div class="active-robot-block">
-              <div class="active-robot-row">
-                <span id="active-robot-name">No robot selected</span>
+          <!-- Robot Configuration Section -->
+          <div class="fleet-section" id="robot-config-section">
+            <span class="section-label">Robot Configuration</span>
+
+            <!-- Empty state when selectedRobotId === null -->
+            <div id="config-empty-state" class="config-empty-card">
+              <div class="config-empty-title">No robot selected</div>
+              <div class="config-empty-hint">Select or add a robot to configure.</div>
+            </div>
+
+            <!-- Configuration Form when a robot is selected -->
+            <div id="config-form" class="config-card" style="display: none;">
+              <!-- Header Row: Robot ID & Status -->
+              <div class="config-header-row">
+                <span id="active-robot-name" class="config-robot-name">Robot-01</span>
+                <span id="status-badge" class="config-status-badge">IDLE</span>
               </div>
-              <span id="robot-status-text">
-                Status: <b id="status-badge">—</b>
-              </span>
+
+              <!-- Speed & Priority -->
+              <div class="config-row-grid">
+                <div class="config-field">
+                  <label for="config-speed-input" class="config-label">Speed (px/s)</label>
+                  <input type="number" id="config-speed-input" class="config-input" min="10" max="500" step="10" value="100" />
+                </div>
+                <div class="config-field">
+                  <label for="config-priority-input" class="config-label">Priority (1–10)</label>
+                  <input type="number" id="config-priority-input" class="config-input" min="1" max="10" step="1" value="1" />
+                </div>
+              </div>
+
+              <!-- Battery -->
+              <div class="config-field">
+                <div class="config-battery-header">
+                  <label for="config-battery-input" class="config-label">Battery</label>
+                  <span id="config-battery-val" class="config-battery-val">100%</span>
+                </div>
+                <input type="range" id="config-battery-input" class="config-slider" min="0" max="100" step="1" value="100" />
+              </div>
+
+              <!-- Task -->
+              <div class="config-field">
+                <label for="config-task-select" class="config-label">Task</label>
+                <select id="config-task-select" class="config-select">
+                  <option value="General Transport">General Transport</option>
+                  <option value="Pickup">Pickup</option>
+                  <option value="Delivery">Delivery</option>
+                  <option value="Warehouse Transfer">Warehouse Transfer</option>
+                  <option value="Priority Delivery">Priority Delivery</option>
+                </select>
+              </div>
+
+              <!-- Positions (Display-Only) -->
+              <div class="config-row-grid">
+                <div class="config-field">
+                  <span class="config-label">Start Position</span>
+                  <div id="config-start-pos" class="config-pos-val">Tile (—, —)</div>
+                </div>
+                <div class="config-field">
+                  <span class="config-label">Destination</span>
+                  <div id="config-dest-pos" class="config-pos-val">Not set</div>
+                </div>
+              </div>
             </div>
           </div>
 
           <!-- Fleet conflicts -->
-          <div class="fleet-section" style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;">
+          <div class="fleet-section" id="conflict-section">
             <div class="conflict-section-header">
               <span class="section-label">Fleet Conflicts</span>
               <span id="conflict-count-badge">0</span>
@@ -112,7 +205,7 @@
             </div>
           </div>
 
-        </div><!-- /.panel-body -->
+        </div><!-- /.panel-scroll-content -->
       </aside><!-- /#fleet-panel -->
 
     </div><!-- /#dashboard-workspace -->

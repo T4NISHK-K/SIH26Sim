@@ -191,6 +191,7 @@ export function addRobotToFleet(scene, map, roadsLayer, containers) {
     speed:                 DEFAULT_SPEED,
     priority:              priority,
     battery:               100,
+    task:                  'General Transport',
     status:                'idle',
     color:                 palette.color,
     colorHex:              palette.colorHex,

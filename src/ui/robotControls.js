@@ -39,48 +39,151 @@ export function createUIController(robots, robotSprites, callbacks) {
 
   // Internal selected-robot state (null at startup until first robot is created)
   let selectedRobotId = null;
+  let lastKnownConflicts = [];
 
-  // ── Status UI ────────────────────────────────────────────────────────────────
+  // ── Live Fleet Overview ─────────────────────────────────────────────────────
+  const updateLiveOverview = (conflicts) => {
+    if (conflicts && Array.isArray(conflicts)) {
+      lastKnownConflicts = conflicts;
+    }
+
+    const robotValues = Object.values(robots);
+    const fleetCount  = robotValues.length;
+    const activeCount = (selectedRobotId && robots[selectedRobotId]) ? 1 : 0;
+    const movingCount = robotValues.filter((r) => r.status === 'moving').length;
+    const idleCount   = robotValues.filter((r) => !r.status || r.status === 'idle').length;
+    const completedCount = robotValues.filter((r) => r.status === 'completed').length;
+    const conflictCount = lastKnownConflicts.length;
+
+    const fleetEl     = document.getElementById('ov-fleet-val');
+    const activeEl    = document.getElementById('ov-active-val');
+    const movingEl    = document.getElementById('ov-moving-val');
+    const idleEl      = document.getElementById('ov-idle-val');
+    const completedEl = document.getElementById('ov-completed-val');
+    const conflictEl  = document.getElementById('ov-conflicts-val');
+
+    if (fleetEl) {
+      fleetEl.innerHTML = `${fleetCount} <span class="ov-unit">${fleetCount === 1 ? 'ROBOT' : 'ROBOTS'}</span>`;
+    }
+    if (activeEl)    activeEl.textContent    = activeCount;
+    if (movingEl)    movingEl.textContent    = movingCount;
+    if (idleEl)      idleEl.textContent      = idleCount;
+    if (completedEl) completedEl.textContent = completedCount;
+    if (conflictEl) {
+      conflictEl.textContent = conflictCount;
+      if (conflictCount > 0) {
+        conflictEl.classList.add('has-conflicts');
+      } else {
+        conflictEl.classList.remove('has-conflicts');
+      }
+    }
+  };
+
+  // ── Status & Configuration UI ───────────────────────────────────────────────
   const updateStatusUI = () => {
     const activeRobot = selectedRobotId ? robots[selectedRobotId] : null;
 
-    const activeNameEl = document.getElementById('active-robot-name');
-    if (activeNameEl) {
-      if (activeRobot) {
+    const emptyStateEl = document.getElementById('config-empty-state');
+    const formEl       = document.getElementById('config-form');
+
+    if (!activeRobot) {
+      if (emptyStateEl) emptyStateEl.style.display = 'block';
+      if (formEl) formEl.style.display = 'none';
+
+      const startBtn = document.getElementById('start-btn');
+      if (startBtn) {
+        startBtn.style.opacity = '0.5';
+        startBtn.style.cursor  = 'not-allowed';
+      }
+    } else {
+      if (emptyStateEl) emptyStateEl.style.display = 'none';
+      if (formEl) formEl.style.display = 'flex';
+
+      // 1. Robot Name & Color
+      const activeNameEl = document.getElementById('active-robot-name');
+      if (activeNameEl) {
         activeNameEl.textContent = activeRobot.id;
         activeNameEl.style.color = activeRobot.colorHex;
-      } else {
-        activeNameEl.textContent = 'No robot selected';
-        activeNameEl.style.color = 'var(--color-text-secondary)';
       }
-    }
 
-    const statusBadge = document.getElementById('status-badge');
-    if (statusBadge) {
-      if (activeRobot) {
+      // 2. Status Badge
+      const statusBadge = document.getElementById('status-badge');
+      if (statusBadge) {
         const status = (activeRobot.status || 'idle').toUpperCase();
         statusBadge.textContent = status;
         if (status === 'MOVING') {
           statusBadge.style.color = '#fbbf24';
+          statusBadge.style.background = 'rgba(251, 191, 36, 0.12)';
         } else if (status === 'COMPLETED') {
           statusBadge.style.color = '#34d399';
+          statusBadge.style.background = 'rgba(52, 211, 153, 0.12)';
         } else {
           statusBadge.style.color = '#38bdf8';
+          statusBadge.style.background = 'rgba(56, 189, 248, 0.12)';
         }
-      } else {
-        statusBadge.textContent = '—';
-        statusBadge.style.color = 'var(--color-text-muted)';
       }
-    }
 
-    const startBtn = document.getElementById('start-btn');
-    if (startBtn) {
-      if (!activeRobot || activeRobot.status === 'moving') {
-        startBtn.style.opacity = '0.5';
-        startBtn.style.cursor  = 'not-allowed';
-      } else {
-        startBtn.style.opacity = '1';
-        startBtn.style.cursor  = 'pointer';
+      // 3. Speed Input
+      const speedInput = document.getElementById('config-speed-input');
+      if (speedInput && document.activeElement !== speedInput) {
+        speedInput.value = activeRobot.speed || 100;
+      }
+
+      // 4. Priority Input
+      const priorityInput = document.getElementById('config-priority-input');
+      if (priorityInput && document.activeElement !== priorityInput) {
+        priorityInput.value = activeRobot.priority || 1;
+      }
+
+      // 5. Battery Slider & Val
+      const batteryInput = document.getElementById('config-battery-input');
+      const batteryVal   = document.getElementById('config-battery-val');
+      const bVal         = activeRobot.battery !== undefined ? activeRobot.battery : 100;
+      if (batteryInput && document.activeElement !== batteryInput) {
+        batteryInput.value = bVal;
+      }
+      if (batteryVal) {
+        batteryVal.textContent = `${bVal}%`;
+      }
+
+      // 6. Task Select
+      const taskSelect = document.getElementById('config-task-select');
+      if (taskSelect && document.activeElement !== taskSelect) {
+        taskSelect.value = activeRobot.task || 'General Transport';
+      }
+
+      // 7. Start Position (Display-Only)
+      const startPosEl = document.getElementById('config-start-pos');
+      if (startPosEl) {
+        if (activeRobot.start) {
+          startPosEl.textContent = `Tile (${activeRobot.start.tileX}, ${activeRobot.start.tileY})`;
+        } else {
+          startPosEl.textContent = 'Tile (—, —)';
+        }
+      }
+
+      // 8. Destination Position (Display-Only)
+      const destPosEl = document.getElementById('config-dest-pos');
+      if (destPosEl) {
+        if (activeRobot.destination) {
+          destPosEl.textContent = `Tile (${activeRobot.destination.tileX}, ${activeRobot.destination.tileY})`;
+          destPosEl.style.color = 'var(--color-text-primary)';
+        } else {
+          destPosEl.textContent = 'Not set';
+          destPosEl.style.color = 'var(--color-text-muted)';
+        }
+      }
+
+      // 9. Start Button
+      const startBtn = document.getElementById('start-btn');
+      if (startBtn) {
+        if (activeRobot.status === 'moving') {
+          startBtn.style.opacity = '0.5';
+          startBtn.style.cursor  = 'not-allowed';
+        } else {
+          startBtn.style.opacity = '1';
+          startBtn.style.cursor  = 'pointer';
+        }
       }
     }
 
@@ -99,6 +202,9 @@ export function createUIController(robots, robotSprites, callbacks) {
         card.style.boxShadow   = 'none';
       }
     });
+
+    // Refresh Live Fleet Overview
+    updateLiveOverview();
   };
 
   // ── Fleet Counter & Limit ───────────────────────────────────────────────────
@@ -119,6 +225,9 @@ export function createUIController(robots, robotSprites, callbacks) {
       if (addBtn) addBtn.disabled = false;
       if (limitNoticeEl) limitNoticeEl.style.display = 'none';
     }
+
+    // Refresh Live Fleet Overview
+    updateLiveOverview();
   };
 
   // ── Dynamic Robot Selector (Fleet Cards) ────────────────────────────────────
@@ -256,6 +365,9 @@ export function createUIController(robots, robotSprites, callbacks) {
 </div>`;
       }
     }).join('');
+
+    // Refresh Live Fleet Overview with updated conflict data
+    updateLiveOverview(conflicts);
   };
 
   // ── Button wiring ─────────────────────────────────────────────────────────────
@@ -286,6 +398,108 @@ export function createUIController(robots, robotSprites, callbacks) {
     startBtn.addEventListener('mousedown', (e) => e.stopPropagation());
   }
 
+  // ── Configuration Inputs Wiring ───────────────────────────────────────────────
+  const isolateEvent = (el) => {
+    if (!el) return;
+    el.addEventListener('pointerdown', (e) => e.stopPropagation());
+    el.addEventListener('mousedown', (e) => e.stopPropagation());
+    el.addEventListener('click', (e) => e.stopPropagation());
+    el.addEventListener('keydown', (e) => e.stopPropagation());
+  };
+
+  const configForm = document.getElementById('config-form');
+  isolateEvent(configForm);
+
+  // Speed input
+  const speedInput = document.getElementById('config-speed-input');
+  if (speedInput) {
+    isolateEvent(speedInput);
+    const applySpeed = () => {
+      if (!selectedRobotId || !robots[selectedRobotId]) return;
+      let val = parseInt(speedInput.value, 10);
+      if (isNaN(val) || val < 10) val = 10;
+      if (val > 500) val = 500;
+      speedInput.value = val;
+      robots[selectedRobotId].speed = val;
+      if (callbacks.onSpeedChanged) callbacks.onSpeedChanged(selectedRobotId);
+    };
+    speedInput.addEventListener('change', applySpeed);
+    speedInput.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const val = parseInt(speedInput.value, 10);
+      if (!isNaN(val) && val >= 10 && val <= 500) {
+        if (selectedRobotId && robots[selectedRobotId]) {
+          robots[selectedRobotId].speed = val;
+          if (callbacks.onSpeedChanged) callbacks.onSpeedChanged(selectedRobotId);
+        }
+      }
+    });
+  }
+
+  // Priority input
+  const priorityInput = document.getElementById('config-priority-input');
+  if (priorityInput) {
+    isolateEvent(priorityInput);
+    const applyPriority = () => {
+      if (!selectedRobotId || !robots[selectedRobotId]) return;
+      let val = parseInt(priorityInput.value, 10);
+      if (isNaN(val) || val < 1) val = 1;
+      if (val > 10) val = 10;
+      priorityInput.value = val;
+      robots[selectedRobotId].priority = val;
+      // Update fleet card priority immediately
+      const card = document.querySelector(`.robot-card[data-robot="${selectedRobotId}"]`);
+      if (card) {
+        const pEl = card.querySelector('.robot-card-priority');
+        if (pEl) pEl.textContent = `Priority: ${val}`;
+      }
+      if (callbacks.onPriorityChanged) callbacks.onPriorityChanged(selectedRobotId);
+    };
+    priorityInput.addEventListener('change', applyPriority);
+    priorityInput.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const val = parseInt(priorityInput.value, 10);
+      if (!isNaN(val) && val >= 1 && val <= 10) {
+        if (selectedRobotId && robots[selectedRobotId]) {
+          robots[selectedRobotId].priority = val;
+          const card = document.querySelector(`.robot-card[data-robot="${selectedRobotId}"]`);
+          if (card) {
+            const pEl = card.querySelector('.robot-card-priority');
+            if (pEl) pEl.textContent = `Priority: ${val}`;
+          }
+          if (callbacks.onPriorityChanged) callbacks.onPriorityChanged(selectedRobotId);
+        }
+      }
+    });
+  }
+
+  // Battery slider
+  const batteryInput = document.getElementById('config-battery-input');
+  const batteryVal   = document.getElementById('config-battery-val');
+  if (batteryInput) {
+    isolateEvent(batteryInput);
+    batteryInput.addEventListener('input', (e) => {
+      e.stopPropagation();
+      if (!selectedRobotId || !robots[selectedRobotId]) return;
+      let val = parseInt(batteryInput.value, 10);
+      if (isNaN(val)) val = 100;
+      val = Math.max(0, Math.min(100, val));
+      robots[selectedRobotId].battery = val;
+      if (batteryVal) batteryVal.textContent = `${val}%`;
+    });
+  }
+
+  // Task select
+  const taskSelect = document.getElementById('config-task-select');
+  if (taskSelect) {
+    isolateEvent(taskSelect);
+    taskSelect.addEventListener('change', (e) => {
+      e.stopPropagation();
+      if (!selectedRobotId || !robots[selectedRobotId]) return;
+      robots[selectedRobotId].task = taskSelect.value;
+    });
+  }
+
   // Initial UI render
   renderRobotSelector();
   updateFleetCounter();
@@ -303,6 +517,7 @@ export function createUIController(robots, robotSprites, callbacks) {
     getSelectedRobotId,
     setSelectedRobotId,
     renderRobotSelector,
-    updateFleetCounter
+    updateFleetCounter,
+    updateLiveOverview
   };
 }

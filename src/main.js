@@ -181,6 +181,15 @@ class WarehouseScene extends Phaser.Scene {
         const curId            = uiController.getSelectedRobotId();
         window.selectedRobotId = curId;
         window.robotState      = curId ? (robots[curId] || null) : null;
+      },
+      onSpeedChanged: (robotId) => {
+        // Recalculate time-parameterized prediction and fleet conflicts without altering path geometry
+        detectFleetConflicts();
+        window.conflicts = getConflicts();
+      },
+      onPriorityChanged: (robotId) => {
+        detectFleetConflicts();
+        window.conflicts = getConflicts();
       }
     });
 
