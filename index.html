@@ -70,13 +70,21 @@
 
         <div class="panel-body">
 
+          <!-- Add Robot and Fleet Count Section -->
+          <div class="fleet-actions-section">
+            <button id="btn-add-robot" class="add-robot-btn" type="button">+ ADD ROBOT</button>
+            <div class="fleet-count-box">
+              <span class="fleet-count-label">FLEET</span>
+              <span id="fleet-count-val" class="fleet-count-val">0 ROBOTS</span>
+            </div>
+          </div>
+          <div id="fleet-limit-notice" class="fleet-limit-notice" style="display: none;">Fleet limit reached</div>
+
           <!-- Robot selector -->
           <div class="fleet-section">
             <span class="section-label">Select Robot</span>
             <div id="robot-selector">
-              <button class="robot-select-btn" data-robot="Robot-01">Robot-01</button>
-              <button class="robot-select-btn" data-robot="Robot-02">Robot-02</button>
-              <button class="robot-select-btn" data-robot="Robot-03">Robot-03</button>
+              <div class="robot-selector-empty">No robots configured</div>
             </div>
           </div>
 
@@ -85,10 +93,10 @@
             <span class="section-label">Active Robot</span>
             <div class="active-robot-block">
               <div class="active-robot-row">
-                <span id="active-robot-name">Robot-01</span>
+                <span id="active-robot-name">No robot selected</span>
               </div>
               <span id="robot-status-text">
-                Status: <b id="status-badge">IDLE</b>
+                Status: <b id="status-badge">—</b>
               </span>
             </div>
           </div>

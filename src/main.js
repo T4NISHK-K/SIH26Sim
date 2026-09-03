@@ -15,7 +15,7 @@
 import Phaser from 'phaser';
 
 import { preloadWarehouseAssets, createWarehouseMap }       from './map/warehouseLoader.js';
-import { createRobots }                                      from './robots/robotManager.js';
+import { createRobots, addRobotToFleet, removeRobotFromFleet } from './robots/robotManager.js';
 import { createPathfinder }                                  from './navigation/astar.js';
 import { createPathVisualizer, createDestinationMarkerUpdater } from './navigation/pathVisualizer.js';
 import { createConflictDetector }                            from './coordination/conflictDetection.js';
@@ -23,7 +23,7 @@ import { createMovementController }                          from './robots/robo
 import { setupRobotDrag }                                    from './robots/robotDrag.js';
 import { createUIController }                                from './ui/robotControls.js';
 import { setupMapControls }                                   from './ui/mapControls.js';
-import { CONFLICT_TIME_THRESHOLD }                           from './config/constants.js';
+import { CONFLICT_TIME_THRESHOLD, MAX_ROBOTS }               from './config/constants.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 class WarehouseScene extends Phaser.Scene {
@@ -42,12 +42,12 @@ class WarehouseScene extends Phaser.Scene {
     // 1. Build the Tiled map (custom TSX loader)
     const { map, roadsLayer, floorLayer, buildingsLayer } = createWarehouseMap(this);
 
-    // 2. Create the robot fleet (sprites, state, graphics containers)
-    const { robots, robotSprites, destinationMarkers, pathGraphics, activeTweens } =
-      createRobots(this, map, roadsLayer);
+    // 2. Create the robot fleet (starts empty with zero robots)
+    const containers = createRobots(this, map, roadsLayer);
+    const { robots, robotSprites, destinationMarkers, pathGraphics, activeTweens } = containers;
 
-    // ── Selected-robot shortcut (kept for quick access in callbacks) ────────────
-    let selectedRobotId = 'Robot-01';
+    // ── Selected-robot shortcut (starts null with 0 robots) ─────────────────────
+    let selectedRobotId = null;
 
     // 3. Path visualizer + destination marker drawer
     const { updatePathVisualization }  = createPathVisualizer(map, robots, pathGraphics);
@@ -77,6 +77,7 @@ class WarehouseScene extends Phaser.Scene {
 
     // ── recalculateRobotPath: ties pathfinder + visualizer + conflict ──────────
     const recalculateRobotPath = (robotId) => {
+      if (!robotId) return;
       const r      = robots[robotId];
       const sprite = robotSprites[robotId];
       if (!r || !sprite) return;
@@ -97,6 +98,7 @@ class WarehouseScene extends Phaser.Scene {
 
     // ── setRobotDestination ───────────────────────────────────────────────────
     const setRobotDestination = (robotId, tileX, tileY) => {
+      if (!robotId) return false;
       const r = robots[robotId];
       if (!r || r.status === 'moving') return false;
 
@@ -121,26 +123,69 @@ class WarehouseScene extends Phaser.Scene {
         detectFleetConflicts
       });
 
-    // 7. UI controller
-    const uiController = createUIController(robots, robotSprites, {
-      startRobotMovement,
-      onRobotSelected: (robotId) => {
-        selectedRobotId        = robotId;
-        window.selectedRobotId = robotId;
-        window.robotState      = robots[robotId];
-      }
-    });
-
-    // Now that uiController exists, wire the conflict panel callback
-    updateConflictPanelFn = (conflicts) => uiController.updateConflictPanel(conflicts);
-
-    // 8. Drag handling
-    const { isDraggingRef, wasDraggingRef, resetDragState } =
+    // 7. Drag handling
+    const { isDraggingRef, wasDraggingRef, resetDragState, registerRobotDrag } =
       setupRobotDrag(this, map, roadsLayer, robots, robotSprites, {
         selectRobot:         (id) => uiController.selectRobot(id),
         updateStatusUI:      ()   => uiController.updateStatusUI(),
         recalculateRobotPath
       });
+
+    // 8. UI controller
+    const uiController = createUIController(robots, robotSprites, {
+      startRobotMovement,
+      onRobotSelected: (robotId) => {
+        selectedRobotId        = robotId;
+        window.selectedRobotId = robotId;
+        window.robotState      = robotId ? (robots[robotId] || null) : null;
+      },
+      onAddRobot: () => {
+        const currentCount = Object.keys(robots).length;
+        if (currentCount >= MAX_ROBOTS) return;
+
+        const newRobotId = addRobotToFleet(this, map, roadsLayer, containers);
+
+        // Register drag handling for the newly created sprite
+        registerRobotDrag(newRobotId);
+
+        // Re-render selector and fleet count
+        uiController.renderRobotSelector();
+        uiController.updateFleetCounter();
+
+        // If first robot or no robot currently selected, auto-select new robot
+        if (!uiController.getSelectedRobotId()) {
+          uiController.selectRobot(newRobotId);
+        }
+
+        // Re-evaluate fleet conflicts
+        detectFleetConflicts();
+
+        // Update debug window references
+        window.robots          = robots;
+        window.robotSprites    = robotSprites;
+        window.conflicts       = getConflicts();
+        const curId            = uiController.getSelectedRobotId();
+        window.selectedRobotId = curId;
+        window.robotState      = curId ? (robots[curId] || null) : null;
+      },
+      onRemoveRobot: (robotId) => {
+        removeRobotFromFleet(robotId, containers);
+
+        // Re-evaluate fleet conflicts
+        detectFleetConflicts();
+
+        // Update debug window references
+        window.robots          = robots;
+        window.robotSprites    = robotSprites;
+        window.conflicts       = getConflicts();
+        const curId            = uiController.getSelectedRobotId();
+        window.selectedRobotId = curId;
+        window.robotState      = curId ? (robots[curId] || null) : null;
+      }
+    });
+
+    // Now that uiController exists, wire the conflict panel callback
+    updateConflictPanelFn = (conflicts) => uiController.updateConflictPanel(conflicts);
 
     // ── Initial pass ──────────────────────────────────────────────────────────
     detectFleetConflicts();
@@ -227,12 +272,15 @@ class WarehouseScene extends Phaser.Scene {
 
       // Only process destination selection on clean background click
       if (dragDistance <= 6 && !isRobotInteraction) {
-        const worldPoint = camera.getWorldPoint(pointer.x, pointer.y);
-        setRobotDestination(
-          uiController.getSelectedRobotId(),
-          map.worldToTileX(worldPoint.x),
-          map.worldToTileY(worldPoint.y)
-        );
+        const currentId = uiController.getSelectedRobotId();
+        if (currentId && robots[currentId]) {
+          const worldPoint = camera.getWorldPoint(pointer.x, pointer.y);
+          setRobotDestination(
+            currentId,
+            map.worldToTileX(worldPoint.x),
+            map.worldToTileY(worldPoint.y)
+          );
+        }
       }
     });
 
@@ -275,9 +323,10 @@ class WarehouseScene extends Phaser.Scene {
     // ── window.* debug exports (preserved from original) ─────────────────────
     window.robots                    = robots;
     window.robotSprites              = robotSprites;
-    window.robotState                = robots['Robot-01'];
+    window.robotState                = selectedRobotId ? (robots[selectedRobotId] || null) : null;
     window.selectedRobotId           = selectedRobotId;
     window.CONFLICT_TIME_THRESHOLD   = CONFLICT_TIME_THRESHOLD;
+    window.MAX_ROBOTS                = MAX_ROBOTS;
     window.conflicts                 = getConflicts();
     window.buildTimeParameterizedPath = buildTimeParameterizedPath;
     window.detectVertexConflicts     = detectVertexConflicts;
@@ -285,12 +334,18 @@ class WarehouseScene extends Phaser.Scene {
     window.detectFleetConflicts      = detectFleetConflicts;
     window.findPath                  = findPath;
     window.recalculateRobotPath      = recalculateRobotPath;
-    window.recalculatePath           = () => recalculateRobotPath(uiController.getSelectedRobotId());
+    window.recalculatePath           = () => {
+      const id = uiController.getSelectedRobotId();
+      if (id) recalculateRobotPath(id);
+    };
     window.startRobotMovement        = startRobotMovement;
     window.setRobotDestination       = setRobotDestination;
-    window.setDestination            = (tileX, tileY) =>
-      setRobotDestination(uiController.getSelectedRobotId(), tileX, tileY);
+    window.setDestination            = (tileX, tileY) => {
+      const id = uiController.getSelectedRobotId();
+      if (id) setRobotDestination(id, tileX, tileY);
+    };
     window.selectRobot               = (id) => uiController.selectRobot(id);
+    window.removeRobot               = (id) => uiController.removeRobot(id);
     window.zoomIn                    = zoomIn;
     window.zoomOut                   = zoomOut;
     window.resetView                 = resetView;

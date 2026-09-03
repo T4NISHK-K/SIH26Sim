@@ -1,16 +1,18 @@
+import { MAX_ROBOTS } from '../config/constants.js';
+
 /**
  * ui/robotControls.js
  * Responsible for all existing UI wiring:
  *   - updateStatusUI()        – robot name/status badge/start-button state
  *   - selectRobot()           – switches the active robot
  *   - updateConflictPanel()   – populates the Fleet Conflicts DOM panel
- *   - Robot selector button click handlers
+ *   - renderRobotSelector()   – dynamic selector buttons & empty state
+ *   - updateFleetCounter()    – dynamic fleet counter and limit indicator
+ *   - + ADD ROBOT button click handler
  *   - START button click handler
  *
  * The module is stateful: it tracks selectedRobotId internally and exposes
  * getSelectedRobotId() / setSelectedRobotId() so main.js can stay in sync.
- *
- * Do NOT redesign the UI. This is a structural move only.
  */
 
 /**
@@ -20,48 +22,60 @@
  * @param {Object.<string, Phaser.GameObjects.Sprite>} robotSprites
  * @param {{
  *   startRobotMovement: Function,
- *   onRobotSelected: Function   // (robotId) => void – called after selectRobot()
+ *   onRobotSelected: Function,  // (robotId) => void – called after selectRobot()
+ *   onAddRobot: Function        // () => void – called when + ADD ROBOT is clicked
  * }} callbacks
  * @returns {{
  *   updateStatusUI: Function,
  *   selectRobot: Function,
  *   updateConflictPanel: Function,
  *   getSelectedRobotId: Function,
- *   setSelectedRobotId: Function
+ *   setSelectedRobotId: Function,
+ *   renderRobotSelector: Function,
+ *   updateFleetCounter: Function
  * }}
  */
 export function createUIController(robots, robotSprites, callbacks) {
 
-  // Internal selected-robot state for this module
-  let selectedRobotId = 'Robot-01';
+  // Internal selected-robot state (null at startup until first robot is created)
+  let selectedRobotId = null;
 
   // ── Status UI ────────────────────────────────────────────────────────────────
   const updateStatusUI = () => {
-    const activeRobot = robots[selectedRobotId];
-    if (!activeRobot) return;
+    const activeRobot = selectedRobotId ? robots[selectedRobotId] : null;
 
     const activeNameEl = document.getElementById('active-robot-name');
     if (activeNameEl) {
-      activeNameEl.textContent = activeRobot.id;
-      activeNameEl.style.color = activeRobot.colorHex;
+      if (activeRobot) {
+        activeNameEl.textContent = activeRobot.id;
+        activeNameEl.style.color = activeRobot.colorHex;
+      } else {
+        activeNameEl.textContent = 'No robot selected';
+        activeNameEl.style.color = 'var(--color-text-secondary)';
+      }
     }
 
     const statusBadge = document.getElementById('status-badge');
     if (statusBadge) {
-      const status = (activeRobot.status || 'idle').toUpperCase();
-      statusBadge.textContent = status;
-      if (status === 'MOVING') {
-        statusBadge.style.color = '#fbbf24';
-      } else if (status === 'COMPLETED') {
-        statusBadge.style.color = '#34d399';
+      if (activeRobot) {
+        const status = (activeRobot.status || 'idle').toUpperCase();
+        statusBadge.textContent = status;
+        if (status === 'MOVING') {
+          statusBadge.style.color = '#fbbf24';
+        } else if (status === 'COMPLETED') {
+          statusBadge.style.color = '#34d399';
+        } else {
+          statusBadge.style.color = '#38bdf8';
+        }
       } else {
-        statusBadge.style.color = '#38bdf8';
+        statusBadge.textContent = '—';
+        statusBadge.style.color = 'var(--color-text-muted)';
       }
     }
 
     const startBtn = document.getElementById('start-btn');
     if (startBtn) {
-      if (activeRobot.status === 'moving') {
+      if (!activeRobot || activeRobot.status === 'moving') {
         startBtn.style.opacity = '0.5';
         startBtn.style.cursor  = 'not-allowed';
       } else {
@@ -70,27 +84,143 @@ export function createUIController(robots, robotSprites, callbacks) {
       }
     }
 
-    // Highlight the active robot's selector button
-    const buttons = document.querySelectorAll('.robot-select-btn');
-    buttons.forEach((btn) => {
-      const rid = btn.getAttribute('data-robot');
-      if (rid === selectedRobotId) {
-        btn.style.background = activeRobot.colorHex;
-        btn.style.color      = '#090d16';
+    // Highlight the active robot's card
+    const cards = document.querySelectorAll('.robot-card');
+    cards.forEach((card) => {
+      const rid = card.getAttribute('data-robot');
+      const r   = robots[rid];
+      if (activeRobot && rid === selectedRobotId && r) {
+        card.classList.add('selected');
+        card.style.borderColor = r.colorHex;
+        card.style.boxShadow   = `0 0 10px ${r.colorHex}35`;
       } else {
-        btn.style.background = '#334155';
-        btn.style.color      = '#cbd5e1';
+        card.classList.remove('selected');
+        card.style.borderColor = 'var(--color-border)';
+        card.style.boxShadow   = 'none';
       }
     });
   };
 
+  // ── Fleet Counter & Limit ───────────────────────────────────────────────────
+  const updateFleetCounter = () => {
+    const count = Object.keys(robots).length;
+    const countEl = document.getElementById('fleet-count-val');
+    if (countEl) {
+      countEl.textContent = count === 1 ? '1 ROBOT' : `${count} ROBOTS`;
+    }
+
+    const addBtn = document.getElementById('btn-add-robot');
+    const limitNoticeEl = document.getElementById('fleet-limit-notice');
+
+    if (count >= MAX_ROBOTS) {
+      if (addBtn) addBtn.disabled = true;
+      if (limitNoticeEl) limitNoticeEl.style.display = 'block';
+    } else {
+      if (addBtn) addBtn.disabled = false;
+      if (limitNoticeEl) limitNoticeEl.style.display = 'none';
+    }
+  };
+
+  // ── Dynamic Robot Selector (Fleet Cards) ────────────────────────────────────
+  const renderRobotSelector = () => {
+    const selectorEl = document.getElementById('robot-selector');
+    if (!selectorEl) return;
+
+    const ids = Object.keys(robots);
+    if (ids.length === 0) {
+      selectorEl.innerHTML = '<div class="robot-selector-empty">No robots configured</div>';
+      return;
+    }
+
+    selectorEl.innerHTML = ids.map((id) => {
+      const r = robots[id];
+      if (!r) return '';
+      const isSelected  = id === selectedRobotId;
+      const statusText  = (r.status || 'idle').toUpperCase();
+      const statusClass = `badge-${(r.status || 'idle').toLowerCase()}`;
+      return `
+        <div class="robot-card ${isSelected ? 'selected' : ''}" data-robot="${id}" style="${isSelected ? `border-color: ${r.colorHex}; box-shadow: 0 0 10px ${r.colorHex}35;` : ''}">
+          <div class="robot-card-top">
+            <div class="robot-card-identity">
+              <span class="robot-card-dot" style="background: ${r.colorHex};"></span>
+              <span class="robot-card-name" style="color: ${r.colorHex};">${id}</span>
+            </div>
+            <span class="robot-card-badge ${statusClass}">● ${statusText}</span>
+          </div>
+          <div class="robot-card-bottom">
+            <span class="robot-card-priority">Priority: ${r.priority}</span>
+            <button class="robot-card-remove-btn" data-remove="${id}" type="button" title="Remove ${id}">REMOVE</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Wire card selection click & pointerdown
+    const cards = selectorEl.querySelectorAll('.robot-card');
+    cards.forEach((card) => {
+      const id = card.getAttribute('data-robot');
+      card.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectRobot(id);
+      });
+      card.addEventListener('pointerdown', (e) => e.stopPropagation());
+      card.addEventListener('mousedown', (e) => e.stopPropagation());
+    });
+
+    // Wire REMOVE buttons with event isolation
+    const removeBtns = selectorEl.querySelectorAll('.robot-card-remove-btn');
+    removeBtns.forEach((btn) => {
+      const id = btn.getAttribute('data-remove');
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        removeRobot(id);
+      });
+      btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+      btn.addEventListener('mousedown', (e) => e.stopPropagation());
+    });
+
+    updateStatusUI();
+  };
+
+  // ── Robot Removal ─────────────────────────────────────────────────────────────
+  const removeRobot = (robotId) => {
+    if (!robotId || !robots[robotId]) return;
+
+    const isCurrent = selectedRobotId === robotId;
+
+    // Determine fallback selection if current active robot is removed
+    let nextSelectedId = null;
+    if (isCurrent) {
+      const remainingIds = Object.keys(robots).filter((id) => id !== robotId);
+      nextSelectedId = remainingIds.length > 0 ? remainingIds[0] : null;
+    }
+
+    // Notify caller (main.js) to clean up Phaser objects & delete from shared collections
+    if (callbacks.onRemoveRobot) {
+      callbacks.onRemoveRobot(robotId);
+    }
+
+    // Update internal selection
+    if (isCurrent) {
+      selectRobot(nextSelectedId);
+    }
+
+    renderRobotSelector();
+    updateFleetCounter();
+    updateStatusUI();
+  };
+
   // ── Robot selection ───────────────────────────────────────────────────────────
   const selectRobot = (robotId) => {
-    if (!robots[robotId]) return;
-    selectedRobotId = robotId;
+    if (robotId && !robots[robotId]) {
+      selectedRobotId = null;
+    } else {
+      selectedRobotId = robotId;
+    }
     updateStatusUI();
     // Notify main.js so it can keep its shortcuts and window.* in sync
-    callbacks.onRobotSelected(robotId);
+    callbacks.onRobotSelected(selectedRobotId);
   };
 
   // ── Fleet Conflicts panel ────────────────────────────────────────────────────
@@ -99,7 +229,7 @@ export function createUIController(robots, robotSprites, callbacks) {
     const badgeEl = document.getElementById('conflict-count-badge');
     if (!listEl) return;
 
-    const n = conflicts.length;
+    const n = conflicts ? conflicts.length : 0;
     if (badgeEl) {
       badgeEl.textContent    = n;
       badgeEl.style.background = n > 0 ? '#ef4444' : '#334155';
@@ -130,25 +260,36 @@ export function createUIController(robots, robotSprites, callbacks) {
 
   // ── Button wiring ─────────────────────────────────────────────────────────────
 
-  // Robot selector buttons
-  const selectorButtons = document.querySelectorAll('.robot-select-btn');
-  selectorButtons.forEach((btn) => {
-    btn.addEventListener('click', (e) => {
+  // + ADD ROBOT button
+  const addBtn = document.getElementById('btn-add-robot');
+  if (addBtn) {
+    addBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      selectRobot(btn.getAttribute('data-robot'));
+      if (callbacks.onAddRobot) {
+        callbacks.onAddRobot();
+      }
     });
-    btn.addEventListener('pointerdown', (e) => e.stopPropagation());
-  });
+    addBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    addBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+  }
 
   // START button
   const startBtn = document.getElementById('start-btn');
   if (startBtn) {
     startBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      callbacks.startRobotMovement(selectedRobotId);
+      if (selectedRobotId && robots[selectedRobotId]) {
+        callbacks.startRobotMovement(selectedRobotId);
+      }
     });
     startBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    startBtn.addEventListener('mousedown', (e) => e.stopPropagation());
   }
+
+  // Initial UI render
+  renderRobotSelector();
+  updateFleetCounter();
+  updateStatusUI();
 
   // ── Accessors ─────────────────────────────────────────────────────────────────
   const getSelectedRobotId = () => selectedRobotId;
@@ -157,8 +298,11 @@ export function createUIController(robots, robotSprites, callbacks) {
   return {
     updateStatusUI,
     selectRobot,
+    removeRobot,
     updateConflictPanel,
     getSelectedRobotId,
-    setSelectedRobotId
+    setSelectedRobotId,
+    renderRobotSelector,
+    updateFleetCounter
   };
 }

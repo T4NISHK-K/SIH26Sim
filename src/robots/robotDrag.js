@@ -45,7 +45,7 @@ export function setupRobotDrag(scene, map, roadsLayer, robots, robotSprites, cal
     wasDraggingRef.value = false;
   };
 
-  Object.keys(robotSprites).forEach((robotId) => {
+  const registerRobotDrag = (robotId) => {
     const sprite = robotSprites[robotId];
     const r      = robots[robotId];
     if (!sprite || !r) return;
@@ -101,7 +101,9 @@ export function setupRobotDrag(scene, map, roadsLayer, robots, robotSprites, cal
     sprite.on('pointerup', () => {
       isDraggingRef.value = false;
     });
-  });
+  };
 
-  return { isDraggingRef, wasDraggingRef, resetDragState };
+  Object.keys(robotSprites).forEach(registerRobotDrag);
+
+  return { isDraggingRef, wasDraggingRef, resetDragState, registerRobotDrag };
 }
