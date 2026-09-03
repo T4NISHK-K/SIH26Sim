@@ -35,16 +35,19 @@ export function createPathVisualizer(map, robots, pathGraphics) {
     const path = r.path;
     if (!path || path.length <= 1) return;
 
-    const color       = r.color;
-    const firstWorldX = map.tileToWorldX(path[0].tileX) + 16;
-    const firstWorldY = map.tileToWorldY(path[0].tileY) + 16;
+    const color = r.color;
+    const getPointX = (pt) => (pt.worldX !== undefined ? pt.worldX : map.tileToWorldX(pt.tileX) + 16);
+    const getPointY = (pt) => (pt.worldY !== undefined ? pt.worldY : map.tileToWorldY(pt.tileY) + 16);
+
+    const firstWorldX = getPointX(path[0]);
+    const firstWorldY = getPointY(path[0]);
 
     // Wide glow stroke (semi-transparent)
     gfx.lineStyle(6, color, 0.35);
     gfx.beginPath();
     gfx.moveTo(firstWorldX, firstWorldY);
     for (let i = 1; i < path.length; i++) {
-      gfx.lineTo(map.tileToWorldX(path[i].tileX) + 16, map.tileToWorldY(path[i].tileY) + 16);
+      gfx.lineTo(getPointX(path[i]), getPointY(path[i]));
     }
     gfx.strokePath();
 
@@ -53,14 +56,14 @@ export function createPathVisualizer(map, robots, pathGraphics) {
     gfx.beginPath();
     gfx.moveTo(firstWorldX, firstWorldY);
     for (let i = 1; i < path.length; i++) {
-      gfx.lineTo(map.tileToWorldX(path[i].tileX) + 16, map.tileToWorldY(path[i].tileY) + 16);
+      gfx.lineTo(getPointX(path[i]), getPointY(path[i]));
     }
     gfx.strokePath();
 
     // Intermediate waypoint dots
     gfx.fillStyle(color, 0.9);
     for (let i = 1; i < path.length - 1; i++) {
-      gfx.fillCircle(map.tileToWorldX(path[i].tileX) + 16, map.tileToWorldY(path[i].tileY) + 16, 2.5);
+      gfx.fillCircle(getPointX(path[i]), getPointY(path[i]), 2.5);
     }
   };
 

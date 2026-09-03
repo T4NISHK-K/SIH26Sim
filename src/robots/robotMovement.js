@@ -70,8 +70,8 @@ export function createMovementController(scene, map, robots, robotSprites, activ
     }
 
     const targetTile  = r.path[waypointIndex];
-    const targetWorldX = map.tileToWorldX(targetTile.tileX) + 16;
-    const targetWorldY = map.tileToWorldY(targetTile.tileY) + 16;
+    const targetWorldX = targetTile.worldX !== undefined ? targetTile.worldX : (map.tileToWorldX(targetTile.tileX) + 16);
+    const targetWorldY = targetTile.worldY !== undefined ? targetTile.worldY : (map.tileToWorldY(targetTile.tileY) + 16);
 
     const distance = Phaser.Math.Distance.Between(sprite.x, sprite.y, targetWorldX, targetWorldY);
     const speed    = r.speed || 100;
@@ -94,6 +94,10 @@ export function createMovementController(scene, map, robots, robotSprites, activ
         r.start.y     = targetWorldY;
         r.start.tileX = targetTile.tileX;
         r.start.tileY = targetTile.tileY;
+        if (targetTile.navX !== undefined) {
+          r.start.navX = targetTile.navX;
+          r.start.navY = targetTile.navY;
+        }
         r.previousValidPosition = { x: targetWorldX, y: targetWorldY };
 
         moveRobotToNextWaypoint(robotId, waypointIndex + 1);
@@ -111,12 +115,9 @@ export function createMovementController(scene, map, robots, robotSprites, activ
 
     if (!r.destination || !r.path || r.path.length === 0) return;
 
-    const currentTileX = map.worldToTileX(sprite.x);
-    const currentTileY = map.worldToTileY(sprite.y);
-
-    if (r.destination.tileX === currentTileX && r.destination.tileY === currentTileY) {
-      r.status = 'completed';
-      callbacks.updateStatusUI();
+    // If already at or within same logical cell
+    if (r.path.length <= 1) {
+      finishRobotMovement(robotId);
       return;
     }
 
@@ -125,8 +126,12 @@ export function createMovementController(scene, map, robots, robotSprites, activ
     // Re-run conflict detection when movement starts
     callbacks.detectFleetConflicts();
 
+    const firstTargetX = r.path[0].worldX !== undefined ? r.path[0].worldX : (map.tileToWorldX(r.path[0].tileX) + 16);
+    const firstTargetY = r.path[0].worldY !== undefined ? r.path[0].worldY : (map.tileToWorldY(r.path[0].tileY) + 16);
+    const distToFirst  = Phaser.Math.Distance.Between(sprite.x, sprite.y, firstTargetX, firstTargetY);
+
     let startIndex = 1;
-    if (r.path[0].tileX !== currentTileX || r.path[0].tileY !== currentTileY) {
+    if (distToFirst > 4) {
       startIndex = 0;
     }
 

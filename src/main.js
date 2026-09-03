@@ -53,8 +53,16 @@ class WarehouseScene extends Phaser.Scene {
     const { updatePathVisualization }  = createPathVisualizer(map, robots, pathGraphics);
     const { updateDestinationMarker }  = createDestinationMarkerUpdater(robots, destinationMarkers);
 
-    // 4. A* pathfinder
-    const { findPath } = createPathfinder(map, roadsLayer);
+    // 4. A* pathfinder on logical navigation graph
+    const {
+      findPath,
+      physicalToLogical,
+      logicalToPhysical,
+      logicalToWorld,
+      worldToLogical,
+      isLogicalWalkable,
+      isRoadWalkable
+    } = createPathfinder(map, roadsLayer);
 
     // ── recalculateRobotPath needs conflict detection, declared before it ──────
     //    Forward-reference resolved by JS closure ordering below.
@@ -104,9 +112,20 @@ class WarehouseScene extends Phaser.Scene {
 
       const roadTile = roadsLayer.getTileAt(tileX, tileY);
       if (roadTile && roadTile.index > 0) {
-        const destX = map.tileToWorldX(tileX) + 16;
-        const destY = map.tileToWorldY(tileY) + 16;
-        r.destination = { x: destX, y: destY, tileX, tileY };
+        let destX = map.tileToWorldX(tileX) + 16;
+        let destY = map.tileToWorldY(tileY) + 16;
+        let navX  = tileX;
+        let navY  = tileY;
+
+        const logicalNode = physicalToLogical(tileX, tileY);
+        if (logicalNode) {
+          destX = logicalNode.worldX;
+          destY = logicalNode.worldY;
+          navX  = logicalNode.navX;
+          navY  = logicalNode.navY;
+        }
+
+        r.destination = { x: destX, y: destY, tileX, tileY, navX, navY };
         if (r.status === 'completed') r.status = 'idle';
         uiController.updateStatusUI();
         updateDestinationMarker(robotId);
@@ -128,7 +147,8 @@ class WarehouseScene extends Phaser.Scene {
       setupRobotDrag(this, map, roadsLayer, robots, robotSprites, {
         selectRobot:         (id) => uiController.selectRobot(id),
         updateStatusUI:      ()   => uiController.updateStatusUI(),
-        recalculateRobotPath
+        recalculateRobotPath,
+        physicalToLogical
       });
 
     // 8. UI controller
@@ -143,7 +163,7 @@ class WarehouseScene extends Phaser.Scene {
         const currentCount = Object.keys(robots).length;
         if (currentCount >= MAX_ROBOTS) return;
 
-        const newRobotId = addRobotToFleet(this, map, roadsLayer, containers);
+        const newRobotId = addRobotToFleet(this, map, roadsLayer, containers, { physicalToLogical });
 
         // Register drag handling for the newly created sprite
         registerRobotDrag(newRobotId);
@@ -342,6 +362,10 @@ class WarehouseScene extends Phaser.Scene {
     window.detectEdgeConflicts       = detectEdgeConflicts;
     window.detectFleetConflicts      = detectFleetConflicts;
     window.findPath                  = findPath;
+    window.physicalToLogical         = physicalToLogical;
+    window.logicalToPhysical         = logicalToPhysical;
+    window.logicalToWorld            = logicalToWorld;
+    window.isLogicalWalkable         = isLogicalWalkable;
     window.recalculateRobotPath      = recalculateRobotPath;
     window.recalculatePath           = () => {
       const id = uiController.getSelectedRobotId();

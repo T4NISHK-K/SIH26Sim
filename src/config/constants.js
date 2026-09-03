@@ -6,6 +6,8 @@
 
 // ─── Tile / display dimensions ────────────────────────────────────────────────
 export const TILE_SIZE = 32;
+export const NAV_CELL_SIZE = 64;
+export const NAV_TILE_FACTOR = 2;
 export const ROBOT_DISPLAY_SIZE = 64;
 
 // ─── Robot defaults ───────────────────────────────────────────────────────────

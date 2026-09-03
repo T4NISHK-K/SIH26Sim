@@ -162,7 +162,7 @@ let nextRobotSeq = 1;
  * }} containers
  * @returns {string} newly created robotId
  */
-export function addRobotToFleet(scene, map, roadsLayer, containers) {
+export function addRobotToFleet(scene, map, roadsLayer, containers, options = {}) {
   const validRoadTiles = getValidRoadTiles(map, roadsLayer);
   const seqNum         = nextRobotSeq++;
   const robotId        = `Robot-${String(seqNum).padStart(2, '0')}`;
@@ -172,8 +172,20 @@ export function addRobotToFleet(scene, map, roadsLayer, containers) {
   const priority       = seqNum;
 
   const tile = pickSpawnTile(validRoadTiles, containers.robots);
-  const wx   = map.tileToWorldX(tile.tileX) + 16;
-  const wy   = map.tileToWorldY(tile.tileY) + 16;
+  let wx     = map.tileToWorldX(tile.tileX) + 16;
+  let wy     = map.tileToWorldY(tile.tileY) + 16;
+  let navX   = tile.tileX;
+  let navY   = tile.tileY;
+
+  if (options && options.physicalToLogical) {
+    const logicalNode = options.physicalToLogical(tile.tileX, tile.tileY);
+    if (logicalNode) {
+      wx   = logicalNode.worldX;
+      wy   = logicalNode.worldY;
+      navX = logicalNode.navX;
+      navY = logicalNode.navY;
+    }
+  }
 
   // 1. Robot state object
   const robot = {
@@ -184,7 +196,9 @@ export function addRobotToFleet(scene, map, roadsLayer, containers) {
       x:     wx,
       y:     wy,
       tileX: tile.tileX,
-      tileY: tile.tileY
+      tileY: tile.tileY,
+      navX:  navX,
+      navY:  navY
     },
     destination:           null,
     path:                  null,

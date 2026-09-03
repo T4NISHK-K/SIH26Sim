@@ -45,8 +45,8 @@ export function createConflictDetector(scene, map, robots, callbacks) {
   let conflicts = [];
 
   // ── 1. TIME-PARAMETERIZED PATH ──────────────────────────────────────────────
-  // Builds robotState.timePath – an ordered list of { tileX, tileY, time }
-  // where `time` is cumulative seconds from the robot's current position.
+  // Builds robotState.timePath – an ordered list of { navX, navY, tileX, tileY, worldX, worldY, time }
+  // where `time` is cumulative seconds from the robot's current position along the corridor centerline.
   // Does NOT touch robotState.path.
   const buildTimeParameterizedPath = (robotId) => {
     const r = robots[robotId];
@@ -56,24 +56,46 @@ export function createConflictDetector(scene, map, robots, callbacks) {
     }
     const timePath = [];
     let t = 0.0;
-    timePath.push({ tileX: r.path[0].tileX, tileY: r.path[0].tileY, time: 0.0 });
+    const first = r.path[0];
+    const firstWx = first.worldX !== undefined ? first.worldX : (map.tileToWorldX(first.tileX) + 16);
+    const firstWy = first.worldY !== undefined ? first.worldY : (map.tileToWorldY(first.tileY) + 16);
+
+    timePath.push({
+      navX:   first.navX !== undefined ? first.navX : first.tileX,
+      navY:   first.navY !== undefined ? first.navY : first.tileY,
+      tileX:  first.tileX,
+      tileY:  first.tileY,
+      worldX: firstWx,
+      worldY: firstWy,
+      time:   0.0
+    });
+
     for (let i = 1; i < r.path.length; i++) {
       const prev = r.path[i - 1];
       const curr = r.path[i];
-      const px = map.tileToWorldX(prev.tileX) + 16;
-      const py = map.tileToWorldY(prev.tileY) + 16;
-      const cx = map.tileToWorldX(curr.tileX) + 16;
-      const cy = map.tileToWorldY(curr.tileY) + 16;
+      const px = prev.worldX !== undefined ? prev.worldX : (map.tileToWorldX(prev.tileX) + 16);
+      const py = prev.worldY !== undefined ? prev.worldY : (map.tileToWorldY(prev.tileY) + 16);
+      const cx = curr.worldX !== undefined ? curr.worldX : (map.tileToWorldX(curr.tileX) + 16);
+      const cy = curr.worldY !== undefined ? curr.worldY : (map.tileToWorldY(curr.tileY) + 16);
       const dist = Phaser.Math.Distance.Between(px, py, cx, cy);
       t += dist / (r.speed || 100);
-      timePath.push({ tileX: curr.tileX, tileY: curr.tileY, time: parseFloat(t.toFixed(3)) });
+
+      timePath.push({
+        navX:   curr.navX !== undefined ? curr.navX : curr.tileX,
+        navY:   curr.navY !== undefined ? curr.navY : curr.tileY,
+        tileX:  curr.tileX,
+        tileY:  curr.tileY,
+        worldX: cx,
+        worldY: cy,
+        time:   parseFloat(t.toFixed(3))
+      });
     }
     r.timePath = timePath;
     return timePath;
   };
 
   // ── 2. VERTEX CONFLICT DETECTOR ─────────────────────────────────────────────
-  // Returns conflicts where robotA and robotB occupy the exact same tile
+  // Returns conflicts where robotA and robotB occupy the exact same logical node
   // within CONFLICT_TIME_THRESHOLD seconds of each other.
   const detectVertexConflicts = (idA, idB) => {
     const rA = robots[idA];
@@ -82,13 +104,15 @@ export function createConflictDetector(scene, map, robots, callbacks) {
     const found = [];
     for (const nA of rA.timePath) {
       for (const nB of rB.timePath) {
-        if (nA.tileX === nB.tileX && nA.tileY === nB.tileY) {
+        if (nA.navX === nB.navX && nA.navY === nB.navY) {
           const dt = Math.abs(nA.time - nB.time);
           if (dt <= CONFLICT_TIME_THRESHOLD) {
             found.push({
               type: 'vertex',
               robotA: idA, robotB: idB,
+              navX: nA.navX, navY: nA.navY,
               tileX: nA.tileX, tileY: nA.tileY,
+              worldX: nA.worldX, worldY: nA.worldY,
               timeA: parseFloat(nA.time.toFixed(2)),
               timeB: parseFloat(nB.time.toFixed(2)),
               timeDiff: parseFloat(dt.toFixed(2))
@@ -101,7 +125,7 @@ export function createConflictDetector(scene, map, robots, callbacks) {
   };
 
   // ── 3. EDGE CONFLICT DETECTOR ────────────────────────────────────────────────
-  // Returns conflicts where robotA traverses edge A→B while robotB traverses
+  // Returns conflicts where robotA traverses logical edge A→B while robotB traverses
   // B→A, and both traversal intervals overlap within the safety threshold.
   const detectEdgeConflicts = (idA, idB) => {
     const rA = robots[idA];
@@ -115,9 +139,9 @@ export function createConflictDetector(scene, map, robots, callbacks) {
       for (let j = 1; j < rB.timePath.length; j++) {
         const fromB = rB.timePath[j - 1];
         const toB   = rB.timePath[j];
-        // Opposite traversal of the same edge?
-        if (fromA.tileX === toB.tileX && fromA.tileY === toB.tileY &&
-            toA.tileX === fromB.tileX && toA.tileY === fromB.tileY) {
+        // Opposite traversal of the same logical edge?
+        if (fromA.navX === toB.navX && fromA.navY === toB.navY &&
+            toA.navX === fromB.navX && toA.navY === fromB.navY) {
           // Do the traversal time-intervals overlap (with threshold slack)?
           const overlap =
             fromA.time <= toB.time   + CONFLICT_TIME_THRESHOLD &&
@@ -126,10 +150,10 @@ export function createConflictDetector(scene, map, robots, callbacks) {
             found.push({
               type: 'edge',
               robotA: idA, robotB: idB,
-              fromA: { tileX: fromA.tileX, tileY: fromA.tileY },
-              toA:   { tileX: toA.tileX,   tileY: toA.tileY },
-              fromB: { tileX: fromB.tileX, tileY: fromB.tileY },
-              toB:   { tileX: toB.tileX,   tileY: toB.tileY },
+              fromA: { navX: fromA.navX, navY: fromA.navY, tileX: fromA.tileX, tileY: fromA.tileY, worldX: fromA.worldX, worldY: fromA.worldY },
+              toA:   { navX: toA.navX,   navY: toA.navY,   tileX: toA.tileX,   tileY: toA.tileY,   worldX: toA.worldX,   worldY: toA.worldY },
+              fromB: { navX: fromB.navX, navY: fromB.navY, tileX: fromB.tileX, tileY: fromB.tileY, worldX: fromB.worldX, worldY: fromB.worldY },
+              toB:   { navX: toB.navX,   navY: toB.navY,   tileX: toB.tileX,   tileY: toB.tileY,   worldX: toB.worldX,   worldY: toB.worldY },
               timeA: parseFloat(((fromA.time + toA.time) / 2).toFixed(2)),
               timeB: parseFloat(((fromB.time + toB.time) / 2).toFixed(2))
             });
@@ -141,15 +165,15 @@ export function createConflictDetector(scene, map, robots, callbacks) {
   };
 
   // ── 4. CONFLICT VISUALIZER ───────────────────────────────────────────────────
-  // Draws warning markers on the Phaser canvas. Never modifies map tiles.
+  // Draws warning markers on the Phaser canvas along the corridor centerline. Never modifies map tiles.
   const renderConflicts = () => {
     conflictGraphics.clear();
     if (!conflicts || conflicts.length === 0) return;
 
     for (const c of conflicts) {
       if (c.type === 'vertex') {
-        const wx = map.tileToWorldX(c.tileX) + 16;
-        const wy = map.tileToWorldY(c.tileY) + 16;
+        const wx = c.worldX !== undefined ? c.worldX : (map.tileToWorldX(c.tileX) + 16);
+        const wy = c.worldY !== undefined ? c.worldY : (map.tileToWorldY(c.tileY) + 16);
         // Soft outer glow
         conflictGraphics.lineStyle(8, 0xff1144, 0.25);
         conflictGraphics.strokeCircle(wx, wy, 16);
@@ -164,10 +188,10 @@ export function createConflictDetector(scene, map, robots, callbacks) {
         conflictGraphics.lineBetween(wx - 5, wy - 5, wx + 5, wy + 5);
         conflictGraphics.lineBetween(wx - 5, wy + 5, wx + 5, wy - 5);
       } else if (c.type === 'edge') {
-        const ax = map.tileToWorldX(c.fromA.tileX) + 16;
-        const ay = map.tileToWorldY(c.fromA.tileY) + 16;
-        const bx = map.tileToWorldX(c.toA.tileX)   + 16;
-        const by = map.tileToWorldY(c.toA.tileY)   + 16;
+        const ax = c.fromA.worldX !== undefined ? c.fromA.worldX : (map.tileToWorldX(c.fromA.tileX) + 16);
+        const ay = c.fromA.worldY !== undefined ? c.fromA.worldY : (map.tileToWorldY(c.fromA.tileY) + 16);
+        const bx = c.toA.worldX   !== undefined ? c.toA.worldX   : (map.tileToWorldX(c.toA.tileX) + 16);
+        const by = c.toA.worldY   !== undefined ? c.toA.worldY   : (map.tileToWorldY(c.toA.tileY) + 16);
         // Glow
         conflictGraphics.lineStyle(9, 0xff5500, 0.3);
         conflictGraphics.lineBetween(ax, ay, bx, by);

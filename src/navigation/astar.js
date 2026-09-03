@@ -1,72 +1,92 @@
 /**
  * navigation/astar.js
- * A* pathfinding on the Roads layer (4-directional, Manhattan heuristic, cost = 1).
+ * A* pathfinding on the logical navigation graph (4-directional, Manhattan heuristic, cost = 1).
  *
- * The Roads layer is the ONLY walkability source. A tile is walkable if and only if
- * roadsLayer.getTileAt(tileX, tileY) returns a tile with index > 0.
+ * Rather than navigating on every independent 32px physical road tile (which produces
+ * parallel-lane routing in 64px corridors), A* runs on the logical navigation graph derived
+ * from the Roads layer. This ensures single-lane centerline routing, preserving full
+ * connectivity across corners, T-junctions, and 4-way intersections.
  *
- * Algorithm details (DO NOT change):
- *   - 4-direction movement (Up, Down, Left, Right)
+ * Algorithm details:
+ *   - 4-direction movement (Up, Down, Left, Right) on logical nodes
  *   - Uniform cost = 1 per step
- *   - Manhattan distance heuristic
- *   - Bounds checking included
- *   - Returns null when target is unreachable
+ *   - Manhattan distance heuristic on logical coordinates (navX, navY)
+ *   - Bounds and walkability derived from logical navigation graph
+ *   - Returns null when target is unreachable or outside road network
  */
 
+import { createLogicalNavGrid } from './navGrid.js';
+
 /**
- * Factory — captures map and roadsLayer once, returns the pathfinding functions.
+ * Factory — captures map and roadsLayer, initializes the logical navigation grid,
+ * and returns the pathfinding and coordinate-conversion functions.
  *
  * @param {Phaser.Tilemaps.Tilemap} map
  * @param {Phaser.Tilemaps.TilemapLayer} roadsLayer
- * @returns {{ findPath: Function, isRoadWalkable: Function }}
+ * @returns {object} Pathfinding and coordinate conversion interface
  */
 export function createPathfinder(map, roadsLayer) {
+  const navGrid = createLogicalNavGrid(map, roadsLayer);
 
   /**
-   * Return true if (tx, ty) is within map bounds and has a road tile.
+   * Return true if physical tile (tx, ty) is within map bounds and has a road tile.
    *
    * @param {number} tx
    * @param {number} ty
    * @returns {boolean}
    */
   const isRoadWalkable = (tx, ty) => {
-    if (tx < 0 || tx >= map.width || ty < 0 || ty >= map.height) return false;
-    const tile = roadsLayer.getTileAt(tx, ty);
-    return !!(tile && tile.index > 0);
+    return navGrid.isPhysicalRoad(tx, ty);
   };
 
   /**
-   * Run A* from (startTileX, startTileY) to (targetTileX, targetTileY).
+   * Helper to resolve either physical tile coordinates or logical coordinates
+   * to a valid logical navigation node.
+   */
+  const resolveNode = (x, y) => {
+    // If fractional (e.g. tileX = 10.5, tileY = 4.5 representing centerline)
+    if (x % 1 !== 0 || y % 1 !== 0) {
+      const node = navGrid.getLogicalNode(Math.floor(x), Math.floor(y));
+      if (node) return node;
+    }
+    // Map physical tile coordinates to logical node
+    const physicalMapped = navGrid.physicalToLogical(Math.floor(x), Math.floor(y));
+    if (physicalMapped) return physicalMapped;
+
+    // Direct logical node lookup fallback
+    return navGrid.getLogicalNode(x, y);
+  };
+
+  /**
+   * Run A* on the logical navigation graph from start to target.
+   * Accepts either physical tile coordinates or logical navigation coordinates.
    *
    * @param {number} startTileX
    * @param {number} startTileY
    * @param {number} targetTileX
    * @param {number} targetTileY
-   * @returns {{ tileX: number, tileY: number }[] | null}
+   * @returns {{ navX: number, navY: number, tileX: number, tileY: number, worldX: number, worldY: number }[] | null}
    */
   const findPath = (startTileX, startTileY, targetTileX, targetTileY) => {
-    if (!isRoadWalkable(startTileX, startTileY) || !isRoadWalkable(targetTileX, targetTileY)) {
+    const startNode  = resolveNode(startTileX, startTileY);
+    const targetNode = resolveNode(targetTileX, targetTileY);
+
+    if (!startNode || !targetNode) {
       return null;
     }
 
-    if (startTileX === targetTileX && startTileY === targetTileY) {
-      return [{ tileX: startTileX, tileY: startTileY }];
+    // Edge case: start and destination in the same logical cell
+    if (startNode.navX === targetNode.navX && startNode.navY === targetNode.navY) {
+      return [{ ...startNode }];
     }
 
-    const keyOf    = (x, y) => `${x},${y}`;
-    const heuristic = (x, y) => Math.abs(x - targetTileX) + Math.abs(y - targetTileY);
+    const keyOf = (x, y) => `${x},${y}`;
+    const heuristic = (x, y) => Math.abs(x - targetNode.navX) + Math.abs(y - targetNode.navY);
 
-    const openSet  = [{ x: startTileX, y: startTileY, f: heuristic(startTileX, startTileY) }];
+    const openSet  = [{ x: startNode.navX, y: startNode.navY, f: heuristic(startNode.navX, startNode.navY) }];
     const cameFrom = new Map();
     const gScore   = new Map();
-    gScore.set(keyOf(startTileX, startTileY), 0);
-
-    const directions = [
-      { dx: 0,  dy: -1 }, // Up
-      { dx: 0,  dy:  1 }, // Down
-      { dx: -1, dy:  0 }, // Left
-      { dx:  1, dy:  0 }  // Right
-    ];
+    gScore.set(keyOf(startNode.navX, startNode.navY), 0);
 
     while (openSet.length > 0) {
       // Find node with lowest f score
@@ -79,26 +99,25 @@ export function createPathfinder(map, roadsLayer) {
       const currentKey = keyOf(current.x, current.y);
 
       // Goal reached — reconstruct path
-      if (current.x === targetTileX && current.y === targetTileY) {
+      if (current.x === targetNode.navX && current.y === targetNode.navY) {
         const path = [];
         let curr = current;
         while (curr) {
-          path.unshift({ tileX: curr.x, tileY: curr.y });
+          const node = navGrid.getLogicalNode(curr.x, curr.y);
+          path.unshift({ ...node });
           curr = cameFrom.get(keyOf(curr.x, curr.y));
         }
         return path;
       }
 
       const currentG = gScore.get(currentKey) ?? Infinity;
+      const neighbors = navGrid.getLogicalNeighbors(current.x, current.y);
 
-      for (const dir of directions) {
-        const nx = current.x + dir.dx;
-        const ny = current.y + dir.dy;
-
-        if (!isRoadWalkable(nx, ny)) continue;
-
-        const neighborKey  = keyOf(nx, ny);
-        const tentativeG   = currentG + 1;
+      for (const neighbor of neighbors) {
+        const nx = neighbor.navX;
+        const ny = neighbor.navY;
+        const neighborKey = keyOf(nx, ny);
+        const tentativeG  = currentG + 1;
 
         if (tentativeG < (gScore.get(neighborKey) ?? Infinity)) {
           cameFrom.set(neighborKey, { x: current.x, y: current.y });
@@ -114,5 +133,15 @@ export function createPathfinder(map, roadsLayer) {
     return null; // Target unreachable
   };
 
-  return { findPath, isRoadWalkable };
+  return {
+    findPath,
+    isRoadWalkable,
+    isLogicalWalkable: navGrid.isLogicalWalkable,
+    physicalToLogical: navGrid.physicalToLogical,
+    logicalToPhysical: navGrid.logicalToPhysical,
+    logicalToWorld:    navGrid.logicalToWorld,
+    worldToLogical:    navGrid.worldToLogical,
+    getLogicalNode:    navGrid.getLogicalNode
+  };
 }
+

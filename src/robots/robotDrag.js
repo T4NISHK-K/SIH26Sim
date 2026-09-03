@@ -81,14 +81,27 @@ export function setupRobotDrag(scene, map, roadsLayer, robots, robotSprites, cal
       const roadTile = roadsLayer.getTileAt(tileX, tileY);
 
       if (roadTile && roadTile.index > 0) {
-        // Valid road tile — snap to tile centre
-        const snapX = map.tileToWorldX(tileX) + 16;
-        const snapY = map.tileToWorldY(tileY) + 16;
+        // Valid road tile — snap to logical corridor centerline
+        let snapX = map.tileToWorldX(tileX) + 16;
+        let snapY = map.tileToWorldY(tileY) + 16;
+        let navX = tileX;
+        let navY = tileY;
+
+        if (callbacks.physicalToLogical) {
+          const logicalNode = callbacks.physicalToLogical(tileX, tileY);
+          if (logicalNode) {
+            snapX = logicalNode.worldX;
+            snapY = logicalNode.worldY;
+            navX  = logicalNode.navX;
+            navY  = logicalNode.navY;
+          }
+        }
+
         sprite.setPosition(snapX, snapY);
         r.previousValidPosition = { x: snapX, y: snapY };
         r.x = snapX;
         r.y = snapY;
-        r.start = { x: snapX, y: snapY, tileX, tileY };
+        r.start = { x: snapX, y: snapY, tileX, tileY, navX, navY };
         if (r.status === 'completed') r.status = 'idle';
         callbacks.updateStatusUI();
         callbacks.recalculateRobotPath(robotId);
