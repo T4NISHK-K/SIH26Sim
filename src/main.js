@@ -15,7 +15,7 @@
 import Phaser from 'phaser';
 
 import { preloadWarehouseAssets, createWarehouseMap }       from './map/warehouseLoader.js';
-import { createRobots, addRobotToFleet, removeRobotFromFleet } from './robots/robotManager.js';
+import { createRobots, addRobotToFleet, removeRobotFromFleet, restoreFleet } from './robots/robotManager.js';
 import { createPathfinder }                                  from './navigation/astar.js';
 import { createPathVisualizer, createDestinationMarkerUpdater } from './navigation/pathVisualizer.js';
 import { createConflictDetector }                            from './coordination/conflictDetection.js';
@@ -24,6 +24,9 @@ import { setupRobotDrag }                                    from './robots/robo
 import { createUIController }                                from './ui/robotControls.js';
 import { setupMapControls }                                   from './ui/mapControls.js';
 import { CONFLICT_TIME_THRESHOLD, MAX_ROBOTS }               from './config/constants.js';
+import { scenarioService }                                   from './scenarios/scenarioService.js';
+import { scenarioRepository }                                from './scenarios/scenarioRepository.js';
+import { createScenarioManager }                             from './ui/scenarioManager.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 class WarehouseScene extends Phaser.Scene {
@@ -216,6 +219,69 @@ class WarehouseScene extends Phaser.Scene {
     // Now that uiController exists, wire the conflict panel callback
     updateConflictPanelFn = (conflicts) => uiController.updateConflictPanel(conflicts);
 
+    // ── Scenario Manager ──────────────────────────────────────────────────────
+    const scenarioManager = createScenarioManager({
+      getScenarios: () => scenarioService.getScenarios(),
+      onSaveScenario: async (name) => {
+        const saved = await scenarioService.saveCurrentScenario(name, robots);
+        return saved;
+      },
+      onUpdateScenario: async (id, name) => {
+        const updated = await scenarioService.updateScenario(id, name, robots);
+        return updated;
+      },
+      onLoadScenario: (scenario) => {
+        if (!scenario || !Array.isArray(scenario.robots)) return;
+
+        // 1. Stop any currently moving robots
+        Object.keys(activeTweens).forEach((id) => {
+          if (activeTweens[id] && typeof activeTweens[id].stop === 'function') {
+            try {
+              activeTweens[id].stop();
+            } catch (err) {
+              console.warn(`Error stopping tween for ${id}:`, err);
+            }
+          }
+          activeTweens[id] = null;
+        });
+
+        // 2. Restore the saved robot fleet
+        const restoredIds = restoreFleet(this, containers, scenario.robots);
+
+        // 3. Re-register drag handling for each restored robot sprite
+        restoredIds.forEach((id) => {
+          registerRobotDrag(id);
+        });
+
+        // 4. Recreate destination markers & recalculate navigation paths
+        restoredIds.forEach((id) => {
+          updateDestinationMarker(id);
+          recalculateRobotPath(id);
+        });
+
+        // 5. Refresh conflict detection
+        detectFleetConflicts();
+
+        // 6. Refresh dashboard metrics/UI
+        uiController.renderRobotSelector();
+        uiController.updateFleetCounter();
+
+        // 7. Select the first robot if fleet is non-empty
+        const targetSelectId = restoredIds.length > 0 ? restoredIds[0] : null;
+        uiController.selectRobot(targetSelectId);
+
+        // 8. Update debug window references
+        window.robots          = robots;
+        window.robotSprites    = robotSprites;
+        window.conflicts       = getConflicts();
+        window.selectedRobotId = targetSelectId;
+        window.robotState      = targetSelectId ? (robots[targetSelectId] || null) : null;
+      },
+      onDeleteScenario: async (id) => {
+        return await scenarioService.deleteScenario(id);
+      }
+    });
+
     // ── Initial pass ──────────────────────────────────────────────────────────
     detectFleetConflicts();
 
@@ -382,6 +448,9 @@ class WarehouseScene extends Phaser.Scene {
     window.zoomIn                    = zoomIn;
     window.zoomOut                   = zoomOut;
     window.resetView                 = resetView;
+    window.scenarioService           = scenarioService;
+    window.scenarioRepository        = scenarioRepository;
+    window.scenarioManager           = scenarioManager;
   }
 }
 

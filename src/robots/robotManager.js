@@ -147,6 +147,106 @@ export function createRobots(scene, map, roadsLayer) {
 let nextRobotSeq = 1;
 
 /**
+ * Register a robot in shared fleet containers and instantiate its Phaser game objects.
+ * Reusable helper used by both dynamic robot addition and scenario restoration.
+ *
+ * @param {Phaser.Scene} scene
+ * @param {{
+ *   robots: Object.<string, object>,
+ *   robotSprites: Object.<string, Phaser.GameObjects.Sprite>,
+ *   destinationMarkers: Object.<string, Phaser.GameObjects.Graphics>,
+ *   pathGraphics: Object.<string, Phaser.GameObjects.Graphics>,
+ *   activeTweens: Object.<string, Phaser.Tweens.Tween|null>
+ * }} containers
+ * @param {{
+ *   id: string,
+ *   start: { x: number, y: number, tileX: number, tileY: number, navX?: number, navY?: number },
+ *   destination?: { x: number, y: number, tileX: number, tileY: number, navX?: number, navY?: number } | null,
+ *   speed?: number,
+ *   priority?: number,
+ *   battery?: number,
+ *   task?: string,
+ *   color: number,
+ *   colorHex: string,
+ *   frame?: number
+ * }} config
+ * @returns {object} instantiated robot state object
+ */
+export function registerRobotInFleet(scene, containers, config) {
+  const {
+    id,
+    start,
+    destination = null,
+    speed = DEFAULT_SPEED,
+    priority = 1,
+    battery = 100,
+    task = 'General Transport',
+    color,
+    colorHex,
+    frame = 0
+  } = config;
+
+  const wx = start.x;
+  const wy = start.y;
+
+  // 1. Robot state object (strictly initial / idle state)
+  const robot = {
+    id:       id,
+    x:        wx,
+    y:        wy,
+    start: {
+      x:     wx,
+      y:     wy,
+      tileX: start.tileX,
+      tileY: start.tileY,
+      navX:  start.navX !== undefined ? start.navX : start.tileX,
+      navY:  start.navY !== undefined ? start.navY : start.tileY
+    },
+    destination: destination ? {
+      x:     destination.x,
+      y:     destination.y,
+      tileX: destination.tileX,
+      tileY: destination.tileY,
+      navX:  destination.navX !== undefined ? destination.navX : destination.tileX,
+      navY:  destination.navY !== undefined ? destination.navY : destination.tileY
+    } : null,
+    path:                  null,
+    speed:                 speed,
+    priority:              priority,
+    battery:               battery,
+    task:                  task,
+    status:                'idle',
+    color:                 color,
+    colorHex:              colorHex,
+    frame:                 frame,
+    previousValidPosition: { x: wx, y: wy }
+  };
+  containers.robots[id] = robot;
+
+  // 2. Sprite
+  const sprite = scene.add.sprite(wx, wy, 'robots', frame);
+  sprite.setDisplaySize(ROBOT_DISPLAY_SIZE, ROBOT_DISPLAY_SIZE);
+  sprite.setDepth(100);
+  containers.robotSprites[id] = sprite;
+
+  // 3. Destination marker graphic
+  const marker = scene.add.graphics();
+  marker.setDepth(90);
+  marker.setVisible(false);
+  containers.destinationMarkers[id] = marker;
+
+  // 4. Path visualization graphic
+  const pathGfx = scene.add.graphics();
+  pathGfx.setDepth(85);
+  containers.pathGraphics[id] = pathGfx;
+
+  // 5. Active tween slot
+  containers.activeTweens[id] = null;
+
+  return robot;
+}
+
+/**
  * Dynamically add a robot to the fleet in place.
  * Mutates the shared containers passed in.
  *
@@ -187,53 +287,84 @@ export function addRobotToFleet(scene, map, roadsLayer, containers, options = {}
     }
   }
 
-  // 1. Robot state object
-  const robot = {
-    id:       robotId,
-    x:        wx,
-    y:        wy,
+  registerRobotInFleet(scene, containers, {
+    id: robotId,
     start: {
-      x:     wx,
-      y:     wy,
+      x: wx,
+      y: wy,
       tileX: tile.tileX,
       tileY: tile.tileY,
-      navX:  navX,
-      navY:  navY
+      navX: navX,
+      navY: navY
     },
-    destination:           null,
-    path:                  null,
-    speed:                 DEFAULT_SPEED,
-    priority:              priority,
-    battery:               100,
-    task:                  'General Transport',
-    status:                'idle',
-    color:                 palette.color,
-    colorHex:              palette.colorHex,
-    previousValidPosition: { x: wx, y: wy }
-  };
-  containers.robots[robotId] = robot;
-
-  // 2. Sprite
-  const sprite = scene.add.sprite(wx, wy, 'robots', palette.frame);
-  sprite.setDisplaySize(ROBOT_DISPLAY_SIZE, ROBOT_DISPLAY_SIZE);
-  sprite.setDepth(100);
-  containers.robotSprites[robotId] = sprite;
-
-  // 3. Destination marker graphic
-  const marker = scene.add.graphics();
-  marker.setDepth(90);
-  marker.setVisible(false);
-  containers.destinationMarkers[robotId] = marker;
-
-  // 4. Path visualization graphic
-  const pathGfx = scene.add.graphics();
-  pathGfx.setDepth(85);
-  containers.pathGraphics[robotId] = pathGfx;
-
-  // 5. Active tween slot
-  containers.activeTweens[robotId] = null;
+    destination: null,
+    speed: DEFAULT_SPEED,
+    priority: priority,
+    battery: 100,
+    task: 'General Transport',
+    color: palette.color,
+    colorHex: palette.colorHex,
+    frame: palette.frame
+  });
 
   return robotId;
+}
+
+/**
+ * Restore an entire fleet from saved scenario robot snapshots.
+ * Stops active movements, tears down existing robots safely via removeRobotFromFleet,
+ * and reinstantiates the saved fleet in canonical initial / idle state.
+ *
+ * @param {Phaser.Scene} scene
+ * @param {{
+ *   robots: Object.<string, object>,
+ *   robotSprites: Object.<string, Phaser.GameObjects.Sprite>,
+ *   destinationMarkers: Object.<string, Phaser.GameObjects.Graphics>,
+ *   pathGraphics: Object.<string, Phaser.GameObjects.Graphics>,
+ *   activeTweens: Object.<string, Phaser.Tweens.Tween|null>
+ * }} containers
+ * @param {object[]} robotSnapshots
+ * @returns {string[]} restored robot IDs
+ */
+export function restoreFleet(scene, containers, robotSnapshots = []) {
+  // 1. Tear down all current robots safely (stops tweens, destroys sprites & graphics)
+  const currentIds = Object.keys(containers.robots || {});
+  for (const id of currentIds) {
+    removeRobotFromFleet(id, containers);
+  }
+
+  const restoredIds = [];
+
+  // 2. Re-instantiate each robot from snapshot
+  for (const snapshot of robotSnapshots) {
+    if (!snapshot || !snapshot.robotId || !snapshot.start) continue;
+
+    registerRobotInFleet(scene, containers, {
+      id: snapshot.robotId,
+      start: snapshot.start,
+      destination: snapshot.destination,
+      speed: snapshot.speed,
+      priority: snapshot.priority,
+      battery: snapshot.battery,
+      task: snapshot.task,
+      color: snapshot.color,
+      colorHex: snapshot.colorHex,
+      frame: snapshot.frame !== undefined ? snapshot.frame : 0
+    });
+
+    restoredIds.push(snapshot.robotId);
+
+    // Keep monotonic nextRobotSeq higher than any loaded Robot-XX ID
+    const match = snapshot.robotId.match(/^Robot-(\d+)$/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num >= nextRobotSeq) {
+        nextRobotSeq = num + 1;
+      }
+    }
+  }
+
+  return restoredIds;
 }
 
 /**

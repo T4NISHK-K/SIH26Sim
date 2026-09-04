@@ -205,6 +205,29 @@
             </div>
           </div>
 
+          <!-- Scenarios Section -->
+          <div class="fleet-section" id="scenarios-section">
+            <div class="scenarios-header-row">
+              <span class="section-label">Scenarios</span>
+            </div>
+            <button id="btn-save-scenario" class="scenario-save-action-btn" type="button">SAVE SCENARIO</button>
+            <div id="scenario-active-bar" class="scenario-active-bar" style="display: none;">
+              <div class="active-bar-info">
+                <span class="active-dot"></span>
+                <span class="active-label">Editing:</span>
+                <span id="active-scenario-name" class="active-name">Scenario</span>
+              </div>
+              <button id="btn-save-scenario-changes" class="btn-save-changes" type="button" title="Save fleet changes to this scenario">SAVE CHANGES</button>
+            </div>
+            <div id="scenario-feedback-msg" class="scenario-feedback-msg" style="display: none;"></div>
+            <div class="scenarios-sub-header">
+              <span class="scenarios-sub-label">Saved Scenarios</span>
+            </div>
+            <div id="scenarios-list" class="scenarios-list">
+              <div class="scenario-empty-hint">No saved scenarios</div>
+            </div>
+          </div>
+
         </div><!-- /.panel-scroll-content -->
       </aside><!-- /#fleet-panel -->
 
@@ -222,6 +245,43 @@
     </footer>
 
   </div><!-- /#app-shell -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MODALS — Save Scenario & Delete Confirmation
+  ════════════════════════════════════════════════════════════ -->
+  <!-- Save Scenario Modal -->
+  <div id="modal-save-scenario" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="save-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span id="save-modal-title" class="modal-title">Save Scenario</span>
+      </div>
+      <div class="modal-body">
+        <label for="input-scenario-name" class="modal-label">Scenario Name:</label>
+        <input type="text" id="input-scenario-name" class="modal-input" placeholder="e.g. Intersection Test" maxlength="40" autocomplete="off" />
+        <div id="scenario-save-error" class="modal-error" style="display: none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-save-scenario" class="modal-btn modal-btn-secondary" type="button">CANCEL</button>
+        <button id="btn-confirm-save-scenario" class="modal-btn modal-btn-primary" type="button">SAVE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Scenario Modal -->
+  <div id="modal-delete-scenario" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span id="delete-modal-title" class="modal-title">Delete Scenario?</span>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Are you sure you want to delete <strong id="delete-scenario-name">this scenario</strong>? This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-delete-scenario" class="modal-btn modal-btn-secondary" type="button">CANCEL</button>
+        <button id="btn-confirm-delete-scenario" class="modal-btn modal-btn-danger" type="button">DELETE</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="/src/main.js"></script>
 </body>
