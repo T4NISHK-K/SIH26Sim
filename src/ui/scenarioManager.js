@@ -74,6 +74,9 @@ export function createScenarioManager(callbacks) {
   let activeScenarioId = null;
   let activeScenarioName = null;
   let feedbackTimer = null;
+  // Tracks whether a simulation run is currently ACTIVE.
+  // When true, SAVE CHANGES is blocked to prevent runtime state leaking into the persisted scenario.
+  let runIsActive = false;
 
   // ── Event isolation ────────────────────────────────────────────────────────
   isolateEvent(saveBtn);
@@ -105,6 +108,20 @@ export function createScenarioManager(callbacks) {
       activeBar.style.display = 'flex';
     } else {
       activeBar.style.display = 'none';
+    }
+    // Reflect run-active state on the SAVE CHANGES button
+    if (saveChangesBtn) {
+      if (runIsActive) {
+        saveChangesBtn.disabled = true;
+        saveChangesBtn.title = 'Simulation run is active — reload the scenario to edit and save';
+        saveChangesBtn.style.opacity = '0.45';
+        saveChangesBtn.style.cursor = 'not-allowed';
+      } else {
+        saveChangesBtn.disabled = false;
+        saveChangesBtn.title = 'Save current robot configuration to this scenario';
+        saveChangesBtn.style.opacity = '';
+        saveChangesBtn.style.cursor = '';
+      }
     }
   };
 
@@ -459,7 +476,19 @@ export function createScenarioManager(callbacks) {
       activeScenarioName = name;
       updateActiveBarUI();
       refreshScenarioList();
-    }
+    },
+    /**
+     * Called by main.js to reflect whether a simulation run is currently active.
+     * When active: disables SAVE CHANGES to prevent runtime state persisting to Supabase.
+     * When inactive: re-enables SAVE CHANGES for pre-run scenario editing.
+     *
+     * @param {boolean} active
+     */
+    setRunActive: (active) => {
+      runIsActive = !!active;
+      updateActiveBarUI();
+    },
+    isRunActive: () => runIsActive
   };
 }
 

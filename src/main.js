@@ -27,6 +27,13 @@ import { CONFLICT_TIME_THRESHOLD, MAX_ROBOTS }               from './config/cons
 import { scenarioService }                                   from './scenarios/scenarioService.js';
 import { scenarioRepository }                                from './scenarios/scenarioRepository.js';
 import { createScenarioManager }                             from './ui/scenarioManager.js';
+import {
+  createRunSession,
+  startRunSession,
+  completeRunSession,
+  areAllRobotsFinished,
+  isRunActive
+} from './simulation/runSession.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 class WarehouseScene extends Phaser.Scene {
@@ -51,6 +58,10 @@ class WarehouseScene extends Phaser.Scene {
 
     // ── Selected-robot shortcut (starts null with 0 robots) ─────────────────────
     let selectedRobotId = null;
+
+    // ── Runtime run session (in-memory only, never written to Supabase) ──────────
+    // Holds: scenarioId, sessionId, status (IDLE/RUNNING/COMPLETED), initialSnapshots
+    let activeRunSession = null;
 
     // 3. Path visualizer + destination marker drawer
     const { updatePathVisualization }  = createPathVisualizer(map, robots, pathGraphics);
@@ -139,11 +150,35 @@ class WarehouseScene extends Phaser.Scene {
     };
 
     // 6. Movement controller
-    const { startRobotMovement, moveRobotToNextWaypoint, finishRobotMovement } =
+    const { startRobotMovement: _startRobotMovement, moveRobotToNextWaypoint, finishRobotMovement } =
       createMovementController(this, map, robots, robotSprites, activeTweens, {
-        updateStatusUI:      () => uiController.updateStatusUI(),
+        updateStatusUI: () => {
+          uiController.updateStatusUI();
+          // Check if all robots have now finished → mark session COMPLETED
+          if (activeRunSession && activeRunSession.status === 'RUNNING' && areAllRobotsFinished(robots)) {
+            completeRunSession(activeRunSession);
+            console.log('[RunSession] All robots finished — session COMPLETED:', activeRunSession.sessionId);
+            // Re-enable SAVE CHANGES now that run is done
+            if (scenarioManagerRef) scenarioManagerRef.setRunActive(false);
+          }
+        },
         detectFleetConflicts
       });
+
+    /**
+     * Wrapped startRobotMovement — transitions the run session to RUNNING
+     * before movement begins. Runtime changes remain in-memory only.
+     * @param {string} robotId
+     */
+    const startRobotMovement = (robotId) => {
+      if (activeRunSession && activeRunSession.status !== 'RUNNING') {
+        startRunSession(activeRunSession);
+        console.log('[RunSession] Run started — session RUNNING:', activeRunSession.sessionId);
+        // Disable SAVE CHANGES while run is active
+        if (scenarioManagerRef) scenarioManagerRef.setRunActive(true);
+      }
+      _startRobotMovement(robotId);
+    };
 
     // 7. Drag handling
     const { isDraggingRef, wasDraggingRef, resetDragState, registerRobotDrag } =
@@ -219,6 +254,9 @@ class WarehouseScene extends Phaser.Scene {
     // Now that uiController exists, wire the conflict panel callback
     updateConflictPanelFn = (conflicts) => uiController.updateConflictPanel(conflicts);
 
+    // ── scenarioManagerRef — forward reference populated after createScenarioManager ─
+    let scenarioManagerRef = null;
+
     // ── Scenario Manager ──────────────────────────────────────────────────────
     const scenarioManager = createScenarioManager({
       getScenarios: () => scenarioService.getScenarios(),
@@ -227,11 +265,30 @@ class WarehouseScene extends Phaser.Scene {
         return saved;
       },
       onUpdateScenario: async (id, name) => {
+        // Guard: never persist runtime movement state back to Supabase during an active run.
+        if (isRunActive(activeRunSession)) {
+          console.warn('[RunSession] SAVE CHANGES blocked — run is currently ACTIVE. Load the scenario again to reset.');
+          throw new Error('Cannot save scenario changes while a simulation run is active. Stop or reload the scenario first.');
+        }
         const updated = await scenarioService.updateScenario(id, name, robots);
         return updated;
       },
       onLoadScenario: (scenario) => {
         if (!scenario || !Array.isArray(scenario.robots)) return;
+
+        // ── Create a FRESH runtime session from the persisted scenario ─────────
+        // Deep copies robot snapshots so the saved scenario is never mutated by
+        // runtime movement. Loading the same scenario again always resets to
+        // the original saved positions.
+        activeRunSession = createRunSession(scenario.id, scenario.robots);
+        console.log('[RunSession] New session created (IDLE):', {
+          scenarioId: activeRunSession.scenarioId,
+          sessionId:  activeRunSession.sessionId,
+          robots:     activeRunSession.initialSnapshots.map((s) => s.robotId)
+        });
+
+        // Re-enable SAVE CHANGES (run is IDLE after a fresh load)
+        if (scenarioManagerRef) scenarioManagerRef.setRunActive(false);
 
         // 1. Stop any currently moving robots
         Object.keys(activeTweens).forEach((id) => {
@@ -245,7 +302,8 @@ class WarehouseScene extends Phaser.Scene {
           activeTweens[id] = null;
         });
 
-        // 2. Restore the saved robot fleet
+        // 2. Restore the fleet from the PERSISTED snapshot (not runtime state)
+        // restoreFleet uses scenario.robots which is the saved/canonical initial config
         const restoredIds = restoreFleet(this, containers, scenario.robots);
 
         // 3. Re-register drag handling for each restored robot sprite
@@ -276,11 +334,15 @@ class WarehouseScene extends Phaser.Scene {
         window.conflicts       = getConflicts();
         window.selectedRobotId = targetSelectId;
         window.robotState      = targetSelectId ? (robots[targetSelectId] || null) : null;
+        window.activeRunSession = activeRunSession;
       },
       onDeleteScenario: async (id) => {
         return await scenarioService.deleteScenario(id);
       }
     });
+
+    // Populate forward reference so movement callbacks can reach scenarioManager
+    scenarioManagerRef = scenarioManager;
 
     // ── Initial pass ──────────────────────────────────────────────────────────
     detectFleetConflicts();
@@ -451,6 +513,7 @@ class WarehouseScene extends Phaser.Scene {
     window.scenarioService           = scenarioService;
     window.scenarioRepository        = scenarioRepository;
     window.scenarioManager           = scenarioManager;
+    window.activeRunSession          = activeRunSession;
   }
 }
 
