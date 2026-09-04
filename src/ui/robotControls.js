@@ -22,6 +22,7 @@ import { MAX_ROBOTS } from '../config/constants.js';
  * @param {Object.<string, Phaser.GameObjects.Sprite>} robotSprites
  * @param {{
  *   startRobotMovement: Function,
+ *   startAllRobots?: Function,
  *   onRobotSelected: Function,  // (robotId) => void – called after selectRobot()
  *   onAddRobot: Function        // () => void – called when + ADD ROBOT is clicked
  * }} callbacks
@@ -396,6 +397,19 @@ export function createUIController(robots, robotSprites, callbacks) {
     });
     startBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     startBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+  }
+
+  // START ALL button
+  const startAllBtn = document.getElementById('start-all-btn');
+  if (startAllBtn) {
+    startAllBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof callbacks.startAllRobots === 'function') {
+        callbacks.startAllRobots();
+      }
+    });
+    startAllBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    startAllBtn.addEventListener('mousedown', (e) => e.stopPropagation());
   }
 
   // ── Configuration Inputs Wiring ───────────────────────────────────────────────

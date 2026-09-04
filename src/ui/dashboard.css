@@ -1036,6 +1036,38 @@ html, body {
   background: #00cff8;
 }
 
+/* START ALL fleet button */
+#start-all-btn {
+  background: linear-gradient(135deg, #00b4d8 0%, #0077b6 100%);
+  color: #ffffff;
+  border: 1px solid rgba(0, 180, 216, 0.4);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s, box-shadow 0.2s, transform 0.08s;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+#start-all-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #00cff8 0%, #0096c7 100%);
+  box-shadow: 0 0 10px rgba(0, 180, 216, 0.4);
+}
+
+#start-all-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+#start-all-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+  border-color: var(--color-border);
+}
+
 .controls-hint {
   font-size: 11px;
   color: var(--color-text-muted);

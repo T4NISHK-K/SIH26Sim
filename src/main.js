@@ -87,6 +87,7 @@ class WarehouseScene extends Phaser.Scene {
     // ── Run Mode Selector helpers ─────────────────────────────────────────────
     const modeBtnBaseline = document.getElementById('btn-mode-baseline');
     const modeBtnOptimized = document.getElementById('btn-mode-optimized');
+    const startAllBtn = document.getElementById('start-all-btn');
     const runStatusDisplay = document.getElementById('run-status-display');
     const runStatusModeEl = document.getElementById('run-status-mode');
     const runStatusValEl = document.getElementById('run-status-val');
@@ -110,6 +111,16 @@ class WarehouseScene extends Phaser.Scene {
       [modeBtnBaseline, modeBtnOptimized].forEach((btn) => {
         if (btn) btn.disabled = disabled;
       });
+    };
+
+    /**
+     * Enable or disable START ALL button (disabled while RUNNING).
+     * @param {boolean} disabled
+     */
+    const setStartAllDisabled = (disabled) => {
+      if (startAllBtn) {
+        startAllBtn.disabled = disabled;
+      }
     };
 
     /**
@@ -290,6 +301,7 @@ class WarehouseScene extends Phaser.Scene {
             // Re-enable SAVE CHANGES and mode selector now that run is done
             if (scenarioManagerRef) scenarioManagerRef.setRunActive(false);
             setModeSelectorDisabled(false);
+            setStartAllDisabled(false);
             updateRunStatusDisplay(activeRunSession.mode, 'COMPLETED');
 
             // ── Step 5: Refresh comparison panel ──────────────────────────────
@@ -320,6 +332,42 @@ class WarehouseScene extends Phaser.Scene {
       });
 
     /**
+     * Start the entire eligible fleet together under ONE RunSession.
+     * Eligible robots are those that are idle (not currently moving), have a destination
+     * and a valid path with length > 1. Robots without valid destinations/paths are safely skipped.
+     */
+    const startAllRobots = () => {
+      const allRobotList = Object.values(robots);
+      const eligibleRobots = allRobotList.filter((r) => {
+        return r &&
+          r.status !== 'moving' &&
+          r.destination &&
+          Array.isArray(r.path) &&
+          r.path.length > 1;
+      });
+
+      if (eligibleRobots.length === 0) {
+        console.log('[RunSession] START ALL clicked, but no eligible idle robots with valid paths.');
+        return;
+      }
+
+      if (activeRunSession && activeRunSession.status !== 'RUNNING') {
+        startRunSession(activeRunSession);
+        activeRunSession.metrics.totalRobots = Object.keys(robots).length;
+        prevConflictCount = 0;
+        console.log('[RunSession] Fleet run started — session RUNNING:', activeRunSession.sessionId, '| mode:', activeRunSession.mode);
+        if (scenarioManagerRef) scenarioManagerRef.setRunActive(true);
+        setModeSelectorDisabled(true);
+        setStartAllDisabled(true);
+        updateRunStatusDisplay(activeRunSession.mode, 'RUNNING');
+      }
+
+      for (const r of eligibleRobots) {
+        _startRobotMovement(r.id);
+      }
+    };
+
+    /**
      * Wrapped startRobotMovement — transitions the run session to RUNNING
      * before movement begins. Runtime changes remain in-memory only.
      * @param {string} robotId
@@ -335,6 +383,7 @@ class WarehouseScene extends Phaser.Scene {
         // Disable SAVE CHANGES and mode selector while run is active
         if (scenarioManagerRef) scenarioManagerRef.setRunActive(true);
         setModeSelectorDisabled(true);
+        setStartAllDisabled(true);
         updateRunStatusDisplay(activeRunSession.mode, 'RUNNING');
       }
       _startRobotMovement(robotId);
@@ -352,6 +401,7 @@ class WarehouseScene extends Phaser.Scene {
     // 8. UI controller
     const uiController = createUIController(robots, robotSprites, {
       startRobotMovement,
+      startAllRobots,
       onRobotSelected: (robotId) => {
         selectedRobotId = robotId;
         window.selectedRobotId = robotId;
@@ -444,6 +494,7 @@ class WarehouseScene extends Phaser.Scene {
         selectedRunMode = RUN_MODES.BASELINE;
         syncModeSelectorUI();
         setModeSelectorDisabled(false);
+        setStartAllDisabled(false);
 
         // ── Create fresh session — mode defaults to BASELINE on load ──────────
         // The existing deepCopySnapshot / initialSnapshots isolation is fully
@@ -673,6 +724,7 @@ class WarehouseScene extends Phaser.Scene {
       if (id) recalculateRobotPath(id);
     };
     window.startRobotMovement = startRobotMovement;
+    window.startAllRobots = startAllRobots;
     window.setRobotDestination = setRobotDestination;
     window.setDestination = (tileX, tileY) => {
       const id = uiController.getSelectedRobotId();
