@@ -15,7 +15,13 @@
  * Run mode:
  *   BASELINE  — existing robot movement, no AI coordination
  *   OPTIMIZED — coordination ON at architecture level (ML to be wired later)
+ *
+ * Step 4 addition:
+ *   Each session carries a `metrics` object (see runMetrics.js).
+ *   Metrics are RUNTIME ONLY — they are never written to Supabase or the Scenario.
  */
+
+import { createRunMetrics } from './runMetrics.js';
 
 /** @typedef {"IDLE"|"RUNNING"|"COMPLETED"} RunStatus */
 /** @typedef {"BASELINE"|"OPTIMIZED"} RunMode */
@@ -26,7 +32,7 @@
  * @enum {string}
  */
 export const RUN_MODES = Object.freeze({
-  BASELINE:  'BASELINE',
+  BASELINE: 'BASELINE',
   OPTIMIZED: 'OPTIMIZED'
 });
 
@@ -49,16 +55,16 @@ export function isValidRunMode(mode) {
 function deepCopySnapshot(snapshot) {
   if (!snapshot) return null;
   return {
-    robotId:     snapshot.robotId,
-    start:       snapshot.start       ? { ...snapshot.start }       : null,
+    robotId: snapshot.robotId,
+    start: snapshot.start ? { ...snapshot.start } : null,
     destination: snapshot.destination ? { ...snapshot.destination } : null,
-    speed:       snapshot.speed,
-    priority:    snapshot.priority,
-    battery:     snapshot.battery,
-    task:        snapshot.task,
-    color:       snapshot.color,
-    colorHex:    snapshot.colorHex,
-    frame:       snapshot.frame !== undefined ? snapshot.frame : 0
+    speed: snapshot.speed,
+    priority: snapshot.priority,
+    battery: snapshot.battery,
+    task: snapshot.task,
+    color: snapshot.color,
+    colorHex: snapshot.colorHex,
+    frame: snapshot.frame !== undefined ? snapshot.frame : 0
   };
 }
 
@@ -105,12 +111,13 @@ export function createRunSession(scenarioId, robotSnapshots = [], mode) {
 
   return {
     scenarioId,
-    sessionId:       generateSessionId(),
-    mode:            resolvedMode,
-    status:          'IDLE',
+    sessionId: generateSessionId(),
+    mode: resolvedMode,
+    status: 'IDLE',
     initialSnapshots,
-    startedAt:       null,
-    completedAt:     null
+    startedAt: null,
+    completedAt: null,
+    metrics: createRunMetrics()
   };
 }
 
@@ -124,7 +131,7 @@ export function createRunSession(scenarioId, robotSnapshots = [], mode) {
 export function startRunSession(session) {
   if (!session) return session;
   if (session.status === "IDLE" || session.status === "COMPLETED") {
-    session.status    = "RUNNING";
+    session.status = "RUNNING";
     session.startedAt = new Date().toISOString();
     session.completedAt = null;
   }
@@ -141,7 +148,7 @@ export function startRunSession(session) {
 export function completeRunSession(session) {
   if (!session) return session;
   if (session.status === "RUNNING") {
-    session.status      = "COMPLETED";
+    session.status = "COMPLETED";
     session.completedAt = new Date().toISOString();
   }
   return session;

@@ -19,7 +19,9 @@
  * @param {Object.<string, Phaser.Tweens.Tween|null>} activeTweens
  * @param {{
  *   updateStatusUI: Function,
- *   detectFleetConflicts: Function
+ *   detectFleetConflicts: Function,
+ *   onSegmentTravelled?: (robotId: string, distancePx: number) => void,
+ *   onRobotCompleted?:   (robotId: string) => void
  * }} callbacks
  * @returns {{
  *   startRobotMovement: Function,
@@ -31,28 +33,35 @@ export function createMovementController(scene, map, robots, robotSprites, activ
 
   // ── Finish ────────────────────────────────────────────────────────────────────
   const finishRobotMovement = (robotId) => {
-    const r      = robots[robotId];
+    const r = robots[robotId];
     const sprite = robotSprites[robotId];
     if (!r || !sprite) return;
 
     activeTweens[robotId] = null;
     if (r.destination) {
-      const finalX     = r.destination.x;
-      const finalY     = r.destination.y;
+      const finalX = r.destination.x;
+      const finalY = r.destination.y;
       const finalTileX = r.destination.tileX;
       const finalTileY = r.destination.tileY;
 
       sprite.setPosition(finalX, finalY);
-      r.x           = finalX;
-      r.y           = finalY;
-      r.start.x     = finalX;
-      r.start.y     = finalY;
+      r.x = finalX;
+      r.y = finalY;
+      r.start.x = finalX;
+      r.start.y = finalY;
       r.start.tileX = finalTileX;
       r.start.tileY = finalTileY;
       r.previousValidPosition = { x: finalX, y: finalY };
     }
 
     r.status = 'completed';
+
+    // Step 4: Notify that this robot has completed its journey so main.js
+    // can stamp a runtime completedAt timestamp. This is RUNTIME ONLY.
+    if (typeof callbacks.onRobotCompleted === 'function') {
+      callbacks.onRobotCompleted(robotId);
+    }
+
     callbacks.updateStatusUI();
     // Refresh conflicts now that this robot has finished moving
     callbacks.detectFleetConflicts();
@@ -60,7 +69,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
 
   // ── Per-waypoint tween ────────────────────────────────────────────────────────
   const moveRobotToNextWaypoint = (robotId, waypointIndex) => {
-    const r      = robots[robotId];
+    const r = robots[robotId];
     const sprite = robotSprites[robotId];
     if (!r || !sprite || r.status !== 'moving') return;
 
@@ -69,29 +78,29 @@ export function createMovementController(scene, map, robots, robotSprites, activ
       return;
     }
 
-    const targetTile  = r.path[waypointIndex];
+    const targetTile = r.path[waypointIndex];
     const targetWorldX = targetTile.worldX !== undefined ? targetTile.worldX : (map.tileToWorldX(targetTile.tileX) + 16);
     const targetWorldY = targetTile.worldY !== undefined ? targetTile.worldY : (map.tileToWorldY(targetTile.tileY) + 16);
 
     const distance = Phaser.Math.Distance.Between(sprite.x, sprite.y, targetWorldX, targetWorldY);
-    const speed    = r.speed || 100;
+    const speed = r.speed || 100;
     const duration = Math.max(1, (distance / speed) * 1000);
 
     activeTweens[robotId] = scene.tweens.add({
-      targets:  sprite,
-      x:        targetWorldX,
-      y:        targetWorldY,
+      targets: sprite,
+      x: targetWorldX,
+      y: targetWorldY,
       duration: duration,
-      ease:     'Linear',
+      ease: 'Linear',
       onUpdate: () => {
         r.x = sprite.x;
         r.y = sprite.y;
       },
       onComplete: () => {
-        r.x           = targetWorldX;
-        r.y           = targetWorldY;
-        r.start.x     = targetWorldX;
-        r.start.y     = targetWorldY;
+        r.x = targetWorldX;
+        r.y = targetWorldY;
+        r.start.x = targetWorldX;
+        r.start.y = targetWorldY;
         r.start.tileX = targetTile.tileX;
         r.start.tileY = targetTile.tileY;
         if (targetTile.navX !== undefined) {
@@ -100,6 +109,11 @@ export function createMovementController(scene, map, robots, robotSprites, activ
         }
         r.previousValidPosition = { x: targetWorldX, y: targetWorldY };
 
+        // Step 4: Report pixel distance of this segment for totalDistancePx metric.
+        if (typeof callbacks.onSegmentTravelled === 'function' && distance > 0) {
+          callbacks.onSegmentTravelled(robotId, distance);
+        }
+
         moveRobotToNextWaypoint(robotId, waypointIndex + 1);
       }
     });
@@ -107,7 +121,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
 
   // ── Start ─────────────────────────────────────────────────────────────────────
   const startRobotMovement = (robotId) => {
-    const r      = robots[robotId];
+    const r = robots[robotId];
     const sprite = robotSprites[robotId];
     if (!r || !sprite) return;
 
@@ -128,7 +142,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
 
     const firstTargetX = r.path[0].worldX !== undefined ? r.path[0].worldX : (map.tileToWorldX(r.path[0].tileX) + 16);
     const firstTargetY = r.path[0].worldY !== undefined ? r.path[0].worldY : (map.tileToWorldY(r.path[0].tileY) + 16);
-    const distToFirst  = Phaser.Math.Distance.Between(sprite.x, sprite.y, firstTargetX, firstTargetY);
+    const distToFirst = Phaser.Math.Distance.Between(sprite.x, sprite.y, firstTargetX, firstTargetY);
 
     let startIndex = 1;
     if (distToFirst > 4) {

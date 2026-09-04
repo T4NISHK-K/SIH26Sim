@@ -1626,3 +1626,114 @@ html, body {
   border-color: #dc2626;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   RUN COMPARISON PANEL (Step 5)
+══════════════════════════════════════════════════════════════ */
+#comparison-section {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comparison-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.comparison-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: 2px 0;
+  line-height: 1.4;
+}
+
+.comparison-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.comparison-table th {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+  padding: 3px 4px 6px 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.comparison-table .cmp-col-metric {
+  text-align: left;
+}
+
+.comparison-table .cmp-col-val {
+  text-align: right;
+  width: 68px;
+}
+
+.comparison-table td {
+  padding: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.cmp-row-label {
+  color: var(--color-text-secondary);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.cmp-val {
+  text-align: right;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.comparison-summaries {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.cmp-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10.5px;
+}
+
+.cmp-summary-label {
+  color: var(--color-text-secondary);
+}
+
+.cmp-summary-val {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--color-text-primary);
+}
+
+.cmp-summary-val.is-positive {
+  color: #34d399; /* soft green for positive improvement */
+}
+
+.cmp-summary-val.is-negative {
+  color: #f87171; /* soft red if regressed */
+}
+

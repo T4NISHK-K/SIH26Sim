@@ -14,19 +14,19 @@
 
 import Phaser from 'phaser';
 
-import { preloadWarehouseAssets, createWarehouseMap }       from './map/warehouseLoader.js';
+import { preloadWarehouseAssets, createWarehouseMap } from './map/warehouseLoader.js';
 import { createRobots, addRobotToFleet, removeRobotFromFleet, restoreFleet } from './robots/robotManager.js';
-import { createPathfinder }                                  from './navigation/astar.js';
+import { createPathfinder } from './navigation/astar.js';
 import { createPathVisualizer, createDestinationMarkerUpdater } from './navigation/pathVisualizer.js';
-import { createConflictDetector }                            from './coordination/conflictDetection.js';
-import { createMovementController }                          from './robots/robotMovement.js';
-import { setupRobotDrag }                                    from './robots/robotDrag.js';
-import { createUIController }                                from './ui/robotControls.js';
-import { setupMapControls }                                   from './ui/mapControls.js';
-import { CONFLICT_TIME_THRESHOLD, MAX_ROBOTS }               from './config/constants.js';
-import { scenarioService }                                   from './scenarios/scenarioService.js';
-import { scenarioRepository }                                from './scenarios/scenarioRepository.js';
-import { createScenarioManager }                             from './ui/scenarioManager.js';
+import { createConflictDetector } from './coordination/conflictDetection.js';
+import { createMovementController } from './robots/robotMovement.js';
+import { setupRobotDrag } from './robots/robotDrag.js';
+import { createUIController } from './ui/robotControls.js';
+import { setupMapControls } from './ui/mapControls.js';
+import { CONFLICT_TIME_THRESHOLD, MAX_ROBOTS } from './config/constants.js';
+import { scenarioService } from './scenarios/scenarioService.js';
+import { scenarioRepository } from './scenarios/scenarioRepository.js';
+import { createScenarioManager } from './ui/scenarioManager.js';
 import {
   createRunSession,
   startRunSession,
@@ -36,6 +36,8 @@ import {
   RUN_MODES,
   isValidRunMode
 } from './simulation/runSession.js';
+import { finaliseMetrics, compareRunMetrics } from './simulation/runMetrics.js';
+import { createComparisonPanel } from './ui/comparisonPanel.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 class WarehouseScene extends Phaser.Scene {
@@ -62,19 +64,32 @@ class WarehouseScene extends Phaser.Scene {
     let selectedRobotId = null;
 
     // ── Runtime run session (in-memory only, never written to Supabase) ──────────
-    // Holds: scenarioId, sessionId, mode, status (IDLE/RUNNING/COMPLETED), initialSnapshots
+    // Holds: scenarioId, sessionId, mode, status (IDLE/RUNNING/COMPLETED), initialSnapshots, metrics
     let activeRunSession = null;
+
+    // ── Step 4: In-memory completed runs store ────────────────────────────────
+    // Accumulates completed run records so later steps can compare
+    // BASELINE vs OPTIMIZED for the same scenario.
+    // This is NOT Supabase persistence — memory only, cleared on page reload.
+    const completedRuns = [];
+
+    // ── Step 4: Conflict edge-trigger tracking ────────────────────────────────
+    // We count conflict *events* (when a new conflict set appears that did not
+    // exist in the previous detection cycle) rather than per-frame samples.
+    // prevConflictCount tracks the size of the last known conflict set so we
+    // only increment the metrics counter when new conflicts emerge.
+    let prevConflictCount = 0;
 
     // ── Selected run mode (persisted between loads until user changes it) ────────
     // Defaults to BASELINE; reset to BASELINE each time a scenario is loaded.
     let selectedRunMode = RUN_MODES.BASELINE;
 
     // ── Run Mode Selector helpers ─────────────────────────────────────────────
-    const modeBtnBaseline  = document.getElementById('btn-mode-baseline');
+    const modeBtnBaseline = document.getElementById('btn-mode-baseline');
     const modeBtnOptimized = document.getElementById('btn-mode-optimized');
     const runStatusDisplay = document.getElementById('run-status-display');
-    const runStatusModeEl  = document.getElementById('run-status-mode');
-    const runStatusValEl   = document.getElementById('run-status-val');
+    const runStatusModeEl = document.getElementById('run-status-mode');
+    const runStatusValEl = document.getElementById('run-status-val');
 
     /**
      * Reflect selectedRunMode visually on the segmented toggle.
@@ -143,8 +158,8 @@ class WarehouseScene extends Phaser.Scene {
     syncModeSelectorUI();
 
     // 3. Path visualizer + destination marker drawer
-    const { updatePathVisualization }  = createPathVisualizer(map, robots, pathGraphics);
-    const { updateDestinationMarker }  = createDestinationMarkerUpdater(robots, destinationMarkers);
+    const { updatePathVisualization } = createPathVisualizer(map, robots, pathGraphics);
+    const { updateDestinationMarker } = createDestinationMarkerUpdater(robots, destinationMarkers);
 
     // 4. A* pathfinder on logical navigation graph
     const {
@@ -163,11 +178,11 @@ class WarehouseScene extends Phaser.Scene {
     // 5. Conflict detection — needs updateConflictPanel from UI controller.
     //    We break the ordering loop by wiring updateConflictPanel via a wrapper
     //    that is populated after the UI controller is created.
-    let updateConflictPanelFn = () => {};
+    let updateConflictPanelFn = () => { };
 
     const {
       conflictGraphics,
-      detectFleetConflicts,
+      detectFleetConflicts: _detectFleetConflicts,
       buildTimeParameterizedPath,
       detectVertexConflicts,
       detectEdgeConflicts,
@@ -176,10 +191,24 @@ class WarehouseScene extends Phaser.Scene {
       updateConflictPanel: (conflicts) => updateConflictPanelFn(conflicts)
     });
 
+    // Wrapped conflict detector — counts conflict events edge-triggered
+    // while a run session is actively RUNNING
+    const detectFleetConflicts = () => {
+      const conflicts = _detectFleetConflicts();
+      if (activeRunSession && activeRunSession.status === 'RUNNING') {
+        const curCount = conflicts.length;
+        if (curCount > prevConflictCount) {
+          activeRunSession.metrics.conflicts += (curCount - prevConflictCount);
+        }
+        prevConflictCount = curCount;
+      }
+      return conflicts;
+    };
+
     // ── recalculateRobotPath: ties pathfinder + visualizer + conflict ──────────
     const recalculateRobotPath = (robotId) => {
       if (!robotId) return;
-      const r      = robots[robotId];
+      const r = robots[robotId];
       const sprite = robotSprites[robotId];
       if (!r || !sprite) return;
 
@@ -207,15 +236,15 @@ class WarehouseScene extends Phaser.Scene {
       if (roadTile && roadTile.index > 0) {
         let destX = map.tileToWorldX(tileX) + 16;
         let destY = map.tileToWorldY(tileY) + 16;
-        let navX  = tileX;
-        let navY  = tileY;
+        let navX = tileX;
+        let navY = tileY;
 
         const logicalNode = physicalToLogical(tileX, tileY);
         if (logicalNode) {
           destX = logicalNode.worldX;
           destY = logicalNode.worldY;
-          navX  = logicalNode.navX;
-          navY  = logicalNode.navY;
+          navX = logicalNode.navX;
+          navY = logicalNode.navY;
         }
 
         r.destination = { x: destX, y: destY, tileX, tileY, navX, navY };
@@ -228,6 +257,13 @@ class WarehouseScene extends Phaser.Scene {
       return false;
     };
 
+    // ── Comparison Panel Controller (Step 5) ─────────────────────────────────
+    const comparisonPanel = createComparisonPanel({
+      getCompletedRuns: () => completedRuns,
+      getCurrentScenarioId: () => (activeRunSession ? activeRunSession.scenarioId : null)
+    });
+    window.comparisonPanel = comparisonPanel;
+
     // 6. Movement controller
     const { startRobotMovement: _startRobotMovement, moveRobotToNextWaypoint, finishRobotMovement } =
       createMovementController(this, map, robots, robotSprites, activeTweens, {
@@ -236,14 +272,51 @@ class WarehouseScene extends Phaser.Scene {
           // Check if all robots have now finished → mark session COMPLETED
           if (activeRunSession && activeRunSession.status === 'RUNNING' && areAllRobotsFinished(robots)) {
             completeRunSession(activeRunSession);
+
+            // ── Step 4: Finalise metrics & archive completed run ──────────────
+            finaliseMetrics(activeRunSession.metrics, activeRunSession, robots);
+            const completedRecord = {
+              scenarioId: activeRunSession.scenarioId,
+              sessionId:  activeRunSession.sessionId,
+              mode:       activeRunSession.mode,
+              metrics:    { ...activeRunSession.metrics }
+            };
+            completedRuns.push(completedRecord);
+            window.completedRuns = completedRuns;
+
             console.log('[RunSession] All robots finished — session COMPLETED:', activeRunSession.sessionId);
+            console.log('[RunMetrics] Final metrics:', activeRunSession.metrics);
+
             // Re-enable SAVE CHANGES and mode selector now that run is done
             if (scenarioManagerRef) scenarioManagerRef.setRunActive(false);
             setModeSelectorDisabled(false);
             updateRunStatusDisplay(activeRunSession.mode, 'COMPLETED');
+
+            // ── Step 5: Refresh comparison panel ──────────────────────────────
+            comparisonPanel.update();
+
+            window.activeRunSession = activeRunSession;
           }
         },
-        detectFleetConflicts
+        detectFleetConflicts,
+        // ── Step 4: Distance accumulation callback ────────────────────────────
+        // Called from moveRobotToNextWaypoint with the pixel distance of each
+        // tween segment so we accumulate real travel distance per session.
+        onSegmentTravelled: (robotId, distancePx) => {
+          if (activeRunSession && activeRunSession.status === 'RUNNING' && distancePx > 0) {
+            activeRunSession.metrics.totalDistancePx =
+              parseFloat((activeRunSession.metrics.totalDistancePx + distancePx).toFixed(2));
+          }
+        },
+        // ── Step 4: Robot completion timestamp callback ────────────────────────
+        // Sets a RUNTIME-ONLY completedAt field on the robot object when it
+        // reaches its destination. This field is never saved to Supabase.
+        onRobotCompleted: (robotId) => {
+          const r = robots[robotId];
+          if (r && !r.completedAt) {
+            r.completedAt = new Date().toISOString();
+          }
+        }
       });
 
     /**
@@ -254,6 +327,10 @@ class WarehouseScene extends Phaser.Scene {
     const startRobotMovement = (robotId) => {
       if (activeRunSession && activeRunSession.status !== 'RUNNING') {
         startRunSession(activeRunSession);
+        // ── Step 4: Record totalRobots at run start ───────────────────────────
+        activeRunSession.metrics.totalRobots = Object.keys(robots).length;
+        // Reset conflict edge-trigger counter for the new run
+        prevConflictCount = 0;
         console.log('[RunSession] Run started — session RUNNING:', activeRunSession.sessionId, '| mode:', activeRunSession.mode);
         // Disable SAVE CHANGES and mode selector while run is active
         if (scenarioManagerRef) scenarioManagerRef.setRunActive(true);
@@ -266,8 +343,8 @@ class WarehouseScene extends Phaser.Scene {
     // 7. Drag handling
     const { isDraggingRef, wasDraggingRef, resetDragState, registerRobotDrag } =
       setupRobotDrag(this, map, roadsLayer, robots, robotSprites, {
-        selectRobot:         (id) => uiController.selectRobot(id),
-        updateStatusUI:      ()   => uiController.updateStatusUI(),
+        selectRobot: (id) => uiController.selectRobot(id),
+        updateStatusUI: () => uiController.updateStatusUI(),
         recalculateRobotPath,
         physicalToLogical
       });
@@ -276,9 +353,9 @@ class WarehouseScene extends Phaser.Scene {
     const uiController = createUIController(robots, robotSprites, {
       startRobotMovement,
       onRobotSelected: (robotId) => {
-        selectedRobotId        = robotId;
+        selectedRobotId = robotId;
         window.selectedRobotId = robotId;
-        window.robotState      = robotId ? (robots[robotId] || null) : null;
+        window.robotState = robotId ? (robots[robotId] || null) : null;
       },
       onAddRobot: () => {
         const currentCount = Object.keys(robots).length;
@@ -302,12 +379,12 @@ class WarehouseScene extends Phaser.Scene {
         detectFleetConflicts();
 
         // Update debug window references
-        window.robots          = robots;
-        window.robotSprites    = robotSprites;
-        window.conflicts       = getConflicts();
-        const curId            = uiController.getSelectedRobotId();
+        window.robots = robots;
+        window.robotSprites = robotSprites;
+        window.conflicts = getConflicts();
+        const curId = uiController.getSelectedRobotId();
         window.selectedRobotId = curId;
-        window.robotState      = curId ? (robots[curId] || null) : null;
+        window.robotState = curId ? (robots[curId] || null) : null;
       },
       onRemoveRobot: (robotId) => {
         removeRobotFromFleet(robotId, containers);
@@ -316,12 +393,12 @@ class WarehouseScene extends Phaser.Scene {
         detectFleetConflicts();
 
         // Update debug window references
-        window.robots          = robots;
-        window.robotSprites    = robotSprites;
-        window.conflicts       = getConflicts();
-        const curId            = uiController.getSelectedRobotId();
+        window.robots = robots;
+        window.robotSprites = robotSprites;
+        window.conflicts = getConflicts();
+        const curId = uiController.getSelectedRobotId();
         window.selectedRobotId = curId;
-        window.robotState      = curId ? (robots[curId] || null) : null;
+        window.robotState = curId ? (robots[curId] || null) : null;
       },
       onSpeedChanged: (robotId) => {
         // Recalculate time-parameterized prediction and fleet conflicts without altering path geometry
@@ -374,9 +451,9 @@ class WarehouseScene extends Phaser.Scene {
         activeRunSession = createRunSession(scenario.id, scenario.robots, selectedRunMode);
         console.log('[RunSession] New session created (IDLE):', {
           scenarioId: activeRunSession.scenarioId,
-          sessionId:  activeRunSession.sessionId,
-          mode:       activeRunSession.mode,
-          robots:     activeRunSession.initialSnapshots.map((s) => s.robotId)
+          sessionId: activeRunSession.sessionId,
+          mode: activeRunSession.mode,
+          robots: activeRunSession.initialSnapshots.map((s) => s.robotId)
         });
 
         // Re-enable SAVE CHANGES (run is IDLE after a fresh load)
@@ -422,12 +499,15 @@ class WarehouseScene extends Phaser.Scene {
         uiController.selectRobot(targetSelectId);
 
         // 8. Update debug window references
-        window.robots          = robots;
-        window.robotSprites    = robotSprites;
-        window.conflicts       = getConflicts();
+        window.robots = robots;
+        window.robotSprites = robotSprites;
+        window.conflicts = getConflicts();
         window.selectedRobotId = targetSelectId;
-        window.robotState      = targetSelectId ? (robots[targetSelectId] || null) : null;
+        window.robotState = targetSelectId ? (robots[targetSelectId] || null) : null;
         window.activeRunSession = activeRunSession;
+
+        // ── Step 5: Refresh comparison panel for the newly loaded scenario ──
+        comparisonPanel.update();
       },
       onDeleteScenario: async (id) => {
         return await scenarioService.deleteScenario(id);
@@ -441,18 +521,18 @@ class WarehouseScene extends Phaser.Scene {
     detectFleetConflicts();
 
     console.log('Warehouse map loaded successfully:', {
-      dimensions:    `${map.width}x${map.height} tiles (${map.widthInPixels}x${map.heightInPixels} px)`,
+      dimensions: `${map.width}x${map.height} tiles (${map.widthInPixels}x${map.heightInPixels} px)`,
       tilesetsCount: map.tilesets.length,
-      layers:        { floor: !!floorLayer, roads: !!roadsLayer, buildings: !!buildingsLayer }
+      layers: { floor: !!floorLayer, roads: !!roadsLayer, buildings: !!buildingsLayer }
     });
 
     // 9. Camera setup: fit whole map, then enable pan + wheel zoom
-    const camera      = this.cameras.main;
-    const mapWidthPx  = map.widthInPixels;
+    const camera = this.cameras.main;
+    const mapWidthPx = map.widthInPixels;
     const mapHeightPx = map.heightInPixels;
 
     const calculateFitZoom = () => {
-      const zoomX = this.scale.width  / mapWidthPx;
+      const zoomX = this.scale.width / mapWidthPx;
       const zoomY = this.scale.height / mapHeightPx;
       return Math.min(zoomX, zoomY) * 0.92;
     };
@@ -473,7 +553,7 @@ class WarehouseScene extends Phaser.Scene {
     // Dynamic zoom limits relative to current fit zoom
     const getMinZoom = () => calculateFitZoom() * 0.85;
     const getMaxZoom = () => calculateFitZoom() * 4.0;
-    const ZOOM_STEP  = 1.25;
+    const ZOOM_STEP = 1.25;
 
     const zoomIn = () => {
       const targetZoom = Phaser.Math.Clamp(camera.zoom * ZOOM_STEP, getMinZoom(), getMaxZoom());
@@ -498,7 +578,7 @@ class WarehouseScene extends Phaser.Scene {
       onResetView: resetView
     });
 
-    let isDragging    = false;
+    let isDragging = false;
     let pointerDownPos = { x: 0, y: 0 };
 
     this.input.on('pointerdown', (pointer, currentlyOver) => {
@@ -571,42 +651,45 @@ class WarehouseScene extends Phaser.Scene {
     });
 
     // ── window.* debug exports (preserved from original) ─────────────────────
-    window.robots                    = robots;
-    window.robotSprites              = robotSprites;
-    window.robotState                = selectedRobotId ? (robots[selectedRobotId] || null) : null;
-    window.selectedRobotId           = selectedRobotId;
-    window.CONFLICT_TIME_THRESHOLD   = CONFLICT_TIME_THRESHOLD;
-    window.MAX_ROBOTS                = MAX_ROBOTS;
-    window.conflicts                 = getConflicts();
+    window.robots = robots;
+    window.robotSprites = robotSprites;
+    window.robotState = selectedRobotId ? (robots[selectedRobotId] || null) : null;
+    window.selectedRobotId = selectedRobotId;
+    window.CONFLICT_TIME_THRESHOLD = CONFLICT_TIME_THRESHOLD;
+    window.MAX_ROBOTS = MAX_ROBOTS;
+    window.conflicts = getConflicts();
     window.buildTimeParameterizedPath = buildTimeParameterizedPath;
-    window.detectVertexConflicts     = detectVertexConflicts;
-    window.detectEdgeConflicts       = detectEdgeConflicts;
-    window.detectFleetConflicts      = detectFleetConflicts;
-    window.findPath                  = findPath;
-    window.physicalToLogical         = physicalToLogical;
-    window.logicalToPhysical         = logicalToPhysical;
-    window.logicalToWorld            = logicalToWorld;
-    window.isLogicalWalkable         = isLogicalWalkable;
-    window.recalculateRobotPath      = recalculateRobotPath;
-    window.recalculatePath           = () => {
+    window.detectVertexConflicts = detectVertexConflicts;
+    window.detectEdgeConflicts = detectEdgeConflicts;
+    window.detectFleetConflicts = detectFleetConflicts;
+    window.findPath = findPath;
+    window.physicalToLogical = physicalToLogical;
+    window.logicalToPhysical = logicalToPhysical;
+    window.logicalToWorld = logicalToWorld;
+    window.isLogicalWalkable = isLogicalWalkable;
+    window.recalculateRobotPath = recalculateRobotPath;
+    window.recalculatePath = () => {
       const id = uiController.getSelectedRobotId();
       if (id) recalculateRobotPath(id);
     };
-    window.startRobotMovement        = startRobotMovement;
-    window.setRobotDestination       = setRobotDestination;
-    window.setDestination            = (tileX, tileY) => {
+    window.startRobotMovement = startRobotMovement;
+    window.setRobotDestination = setRobotDestination;
+    window.setDestination = (tileX, tileY) => {
       const id = uiController.getSelectedRobotId();
       if (id) setRobotDestination(id, tileX, tileY);
     };
-    window.selectRobot               = (id) => uiController.selectRobot(id);
-    window.removeRobot               = (id) => uiController.removeRobot(id);
-    window.zoomIn                    = zoomIn;
-    window.zoomOut                   = zoomOut;
-    window.resetView                 = resetView;
-    window.scenarioService           = scenarioService;
-    window.scenarioRepository        = scenarioRepository;
-    window.scenarioManager           = scenarioManager;
-    window.activeRunSession          = activeRunSession;
+    window.selectRobot = (id) => uiController.selectRobot(id);
+    window.removeRobot = (id) => uiController.removeRobot(id);
+    window.zoomIn = zoomIn;
+    window.zoomOut = zoomOut;
+    window.resetView = resetView;
+    window.scenarioService = scenarioService;
+    window.scenarioRepository = scenarioRepository;
+    window.scenarioManager = scenarioManager;
+    window.activeRunSession = activeRunSession;
+    window.completedRuns = completedRuns;
+    window.compareRunMetrics = compareRunMetrics;
+    window.comparisonPanel = comparisonPanel;
   }
 }
 
@@ -614,12 +697,12 @@ class WarehouseScene extends Phaser.Scene {
 const config = {
   type: Phaser.AUTO,
   parent: 'game-container',
-  width:  window.innerWidth,
+  width: window.innerWidth,
   height: window.innerHeight,
-  pixelArt:    true,
+  pixelArt: true,
   roundPixels: true,
   scale: {
-    mode:       Phaser.Scale.RESIZE,
+    mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
   backgroundColor: '#1e1e24',
