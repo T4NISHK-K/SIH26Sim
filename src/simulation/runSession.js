@@ -11,9 +11,33 @@
  * Run status lifecycle:
  *   IDLE  →  RUNNING  →  COMPLETED
  *   IDLE  ← (load same scenario again resets to fresh IDLE session)
+ *
+ * Run mode:
+ *   BASELINE  — existing robot movement, no AI coordination
+ *   OPTIMIZED — coordination ON at architecture level (ML to be wired later)
  */
 
 /** @typedef {"IDLE"|"RUNNING"|"COMPLETED"} RunStatus */
+/** @typedef {"BASELINE"|"OPTIMIZED"} RunMode */
+
+/**
+ * Supported run modes — single source of truth.
+ * @readonly
+ * @enum {string}
+ */
+export const RUN_MODES = Object.freeze({
+  BASELINE:  'BASELINE',
+  OPTIMIZED: 'OPTIMIZED'
+});
+
+/**
+ * Return true if mode is a recognised RunMode value.
+ * @param {string} mode
+ * @returns {boolean}
+ */
+export function isValidRunMode(mode) {
+  return mode === RUN_MODES.BASELINE || mode === RUN_MODES.OPTIMIZED;
+}
 
 /**
  * Create a deep copy of a robot snapshot to prevent shared mutable references
@@ -54,24 +78,36 @@ function generateSessionId() {
  * Deep-copies all robot snapshots so the runtime session owns immutable initial state
  * that cannot be accidentally shared with the live robot objects.
  *
+ * The snapshot isolation logic (deepCopySnapshot / initialSnapshots) is preserved
+ * exactly — mode is additive metadata only and does NOT influence snapshot copying.
+ *
  * @param {string}   scenarioId      - The source scenario UUID (from Supabase)
  * @param {object[]} robotSnapshots  - scenario.robots array (canonical initial state)
+ * @param {RunMode}  [mode]          - Run mode; defaults to BASELINE if omitted or invalid
  * @returns {{
  *   scenarioId:       string,
  *   sessionId:        string,
+ *   mode:             RunMode,
  *   status:           RunStatus,
  *   initialSnapshots: object[],
  *   startedAt:        string|null,
  *   completedAt:      string|null
  * }}
  */
-export function createRunSession(scenarioId, robotSnapshots = []) {
+export function createRunSession(scenarioId, robotSnapshots = [], mode) {
+  // Validate mode; fall back to BASELINE so callers can safely omit it.
+  const resolvedMode = isValidRunMode(mode) ? mode : RUN_MODES.BASELINE;
+
+  // ── Snapshot isolation (unchanged from Step 2) ──────────────────────────
+  // Deep-copies every robot snapshot so the live fleet objects can never
+  // accidentally mutate the saved scenario's canonical initial state.
   const initialSnapshots = robotSnapshots.map(deepCopySnapshot).filter(Boolean);
 
   return {
     scenarioId,
     sessionId:       generateSessionId(),
-    status:          "IDLE",
+    mode:            resolvedMode,
+    status:          'IDLE',
     initialSnapshots,
     startedAt:       null,
     completedAt:     null

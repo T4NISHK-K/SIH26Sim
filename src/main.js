@@ -32,7 +32,9 @@ import {
   startRunSession,
   completeRunSession,
   areAllRobotsFinished,
-  isRunActive
+  isRunActive,
+  RUN_MODES,
+  isValidRunMode
 } from './simulation/runSession.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,8 +62,85 @@ class WarehouseScene extends Phaser.Scene {
     let selectedRobotId = null;
 
     // ── Runtime run session (in-memory only, never written to Supabase) ──────────
-    // Holds: scenarioId, sessionId, status (IDLE/RUNNING/COMPLETED), initialSnapshots
+    // Holds: scenarioId, sessionId, mode, status (IDLE/RUNNING/COMPLETED), initialSnapshots
     let activeRunSession = null;
+
+    // ── Selected run mode (persisted between loads until user changes it) ────────
+    // Defaults to BASELINE; reset to BASELINE each time a scenario is loaded.
+    let selectedRunMode = RUN_MODES.BASELINE;
+
+    // ── Run Mode Selector helpers ─────────────────────────────────────────────
+    const modeBtnBaseline  = document.getElementById('btn-mode-baseline');
+    const modeBtnOptimized = document.getElementById('btn-mode-optimized');
+    const runStatusDisplay = document.getElementById('run-status-display');
+    const runStatusModeEl  = document.getElementById('run-status-mode');
+    const runStatusValEl   = document.getElementById('run-status-val');
+
+    /**
+     * Reflect selectedRunMode visually on the segmented toggle.
+     */
+    const syncModeSelectorUI = () => {
+      [modeBtnBaseline, modeBtnOptimized].forEach((btn) => {
+        if (!btn) return;
+        const isActive = btn.getAttribute('data-mode') === selectedRunMode;
+        btn.classList.toggle('run-mode-btn--active', isActive);
+      });
+    };
+
+    /**
+     * Enable or disable both mode buttons (locked while RUNNING).
+     * @param {boolean} disabled
+     */
+    const setModeSelectorDisabled = (disabled) => {
+      [modeBtnBaseline, modeBtnOptimized].forEach((btn) => {
+        if (btn) btn.disabled = disabled;
+      });
+    };
+
+    /**
+     * Update the compact status readout in the controls bar.
+     * Shows "Mode: X · STATUS" after a scenario has been loaded.
+     * @param {string|null} mode   - e.g. 'BASELINE'
+     * @param {string|null} status - e.g. 'IDLE' | 'RUNNING' | 'COMPLETED' | null
+     */
+    const updateRunStatusDisplay = (mode, status) => {
+      if (!runStatusDisplay) return;
+      if (!mode || !status) {
+        runStatusDisplay.style.display = 'none';
+        return;
+      }
+      runStatusDisplay.style.display = 'flex';
+      if (runStatusModeEl) runStatusModeEl.textContent = `Mode: ${mode}`;
+      if (runStatusValEl) {
+        runStatusValEl.textContent = status;
+        runStatusValEl.setAttribute('data-status', status);
+      }
+    };
+
+    // Wire mode button clicks
+    [modeBtnBaseline, modeBtnOptimized].forEach((btn) => {
+      if (!btn) return;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newMode = btn.getAttribute('data-mode');
+        if (!isValidRunMode(newMode)) return;
+        // Do not allow changes while running
+        if (activeRunSession && activeRunSession.status === 'RUNNING') return;
+        selectedRunMode = newMode;
+        syncModeSelectorUI();
+        // If a session is already IDLE/COMPLETED, update its mode retroactively
+        // so the START button uses the new selection.
+        if (activeRunSession && activeRunSession.status !== 'RUNNING') {
+          activeRunSession.mode = selectedRunMode;
+          updateRunStatusDisplay(selectedRunMode, activeRunSession.status);
+          window.activeRunSession = activeRunSession;
+        }
+        console.log('[RunMode] Selected:', selectedRunMode);
+      });
+    });
+
+    // Initial UI sync (BASELINE active by default from HTML, but enforce via JS)
+    syncModeSelectorUI();
 
     // 3. Path visualizer + destination marker drawer
     const { updatePathVisualization }  = createPathVisualizer(map, robots, pathGraphics);
@@ -158,8 +237,10 @@ class WarehouseScene extends Phaser.Scene {
           if (activeRunSession && activeRunSession.status === 'RUNNING' && areAllRobotsFinished(robots)) {
             completeRunSession(activeRunSession);
             console.log('[RunSession] All robots finished — session COMPLETED:', activeRunSession.sessionId);
-            // Re-enable SAVE CHANGES now that run is done
+            // Re-enable SAVE CHANGES and mode selector now that run is done
             if (scenarioManagerRef) scenarioManagerRef.setRunActive(false);
+            setModeSelectorDisabled(false);
+            updateRunStatusDisplay(activeRunSession.mode, 'COMPLETED');
           }
         },
         detectFleetConflicts
@@ -173,9 +254,11 @@ class WarehouseScene extends Phaser.Scene {
     const startRobotMovement = (robotId) => {
       if (activeRunSession && activeRunSession.status !== 'RUNNING') {
         startRunSession(activeRunSession);
-        console.log('[RunSession] Run started — session RUNNING:', activeRunSession.sessionId);
-        // Disable SAVE CHANGES while run is active
+        console.log('[RunSession] Run started — session RUNNING:', activeRunSession.sessionId, '| mode:', activeRunSession.mode);
+        // Disable SAVE CHANGES and mode selector while run is active
         if (scenarioManagerRef) scenarioManagerRef.setRunActive(true);
+        setModeSelectorDisabled(true);
+        updateRunStatusDisplay(activeRunSession.mode, 'RUNNING');
       }
       _startRobotMovement(robotId);
     };
@@ -280,15 +363,25 @@ class WarehouseScene extends Phaser.Scene {
         // Deep copies robot snapshots so the saved scenario is never mutated by
         // runtime movement. Loading the same scenario again always resets to
         // the original saved positions.
-        activeRunSession = createRunSession(scenario.id, scenario.robots);
+        // Reset run mode to BASELINE on every fresh scenario load
+        selectedRunMode = RUN_MODES.BASELINE;
+        syncModeSelectorUI();
+        setModeSelectorDisabled(false);
+
+        // ── Create fresh session — mode defaults to BASELINE on load ──────────
+        // The existing deepCopySnapshot / initialSnapshots isolation is fully
+        // preserved inside createRunSession; mode is additive metadata only.
+        activeRunSession = createRunSession(scenario.id, scenario.robots, selectedRunMode);
         console.log('[RunSession] New session created (IDLE):', {
           scenarioId: activeRunSession.scenarioId,
           sessionId:  activeRunSession.sessionId,
+          mode:       activeRunSession.mode,
           robots:     activeRunSession.initialSnapshots.map((s) => s.robotId)
         });
 
         // Re-enable SAVE CHANGES (run is IDLE after a fresh load)
         if (scenarioManagerRef) scenarioManagerRef.setRunActive(false);
+        updateRunStatusDisplay(activeRunSession.mode, 'IDLE');
 
         // 1. Stop any currently moving robots
         Object.keys(activeTweens).forEach((id) => {

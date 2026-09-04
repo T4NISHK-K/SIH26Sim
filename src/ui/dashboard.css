@@ -1041,10 +1041,124 @@ html, body {
   color: var(--color-text-muted);
 }
 
+/* ─── Run Mode Selector (Simulation Controls Bar) ─────────────────────────── */
+.run-mode-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.run-mode-label {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+  white-space: nowrap;
+}
+
+/* Segmented pill container */
+.run-mode-toggle {
+  display: flex;
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.run-mode-btn {
+  padding: 4px 11px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.12s;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.run-mode-btn:hover:not(:disabled):not(.run-mode-btn--active) {
+  background: var(--color-bg-input);
+  color: var(--color-text-secondary);
+}
+
+/* Active — BASELINE: cyan accent */
+.run-mode-btn--active[data-mode="BASELINE"] {
+  background: rgba(0, 180, 216, 0.18);
+  border-color: rgba(0, 180, 216, 0.55);
+  color: var(--color-accent);
+  box-shadow: 0 0 8px rgba(0, 180, 216, 0.2);
+}
+
+/* Active — OPTIMIZED: soft purple, distinct from cyan */
+.run-mode-btn--active[data-mode="OPTIMIZED"] {
+  background: rgba(167, 139, 250, 0.18);
+  border-color: rgba(167, 139, 250, 0.55);
+  color: #a78bfa;
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.2);
+}
+
+/* Disabled state (run is RUNNING) */
+.run-mode-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ─── Run Status Display (Simulation Controls Bar) ─────────────────────────── */
+.run-status-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+}
+
+.run-status-mode {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.run-status-sep {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.run-status-val {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Status colour variants */
+.run-status-val[data-status="IDLE"]      { color: var(--color-text-secondary); }
+.run-status-val[data-status="RUNNING"]   { color: #fbbf24; }
+.run-status-val[data-status="COMPLETED"] { color: #34d399; }
+
+
 /* ═══════════════════════════════════════════════════════════════
    SCENARIOS SECTION (Fleet Management Panel)
 ═══════════════════════════════════════════════════════════════ */
 #scenarios-section {
+
   border-top: 1px solid var(--color-border);
   padding-top: var(--space-md);
   margin-top: var(--space-xs);

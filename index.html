@@ -237,12 +237,32 @@
     <footer id="simulation-controls">
       <span class="controls-label">Simulation Controls</span>
       <div class="controls-divider"></div>
+
+      <!-- Run Mode Selector -->
+      <div class="run-mode-selector" id="run-mode-selector">
+        <span class="run-mode-label">RUN MODE</span>
+        <div class="run-mode-toggle" id="run-mode-toggle" role="group" aria-label="Run Mode">
+          <button class="run-mode-btn run-mode-btn--active" id="btn-mode-baseline" data-mode="BASELINE" type="button" title="Baseline: existing robot movement, no AI coordination">BASELINE</button>
+          <button class="run-mode-btn" id="btn-mode-optimized" data-mode="OPTIMIZED" type="button" title="Optimized: AI coordination enabled (ML integration coming)">OPTIMIZED</button>
+        </div>
+      </div>
+
+      <div class="controls-divider"></div>
+
+      <!-- Run Status Readout (visible after scenario load) -->
+      <div class="run-status-display" id="run-status-display" style="display:none;">
+        <span class="run-status-mode" id="run-status-mode">Mode: BASELINE</span>
+        <span class="run-status-sep">·</span>
+        <span class="run-status-val" id="run-status-val">IDLE</span>
+      </div>
+
       <div class="controls-group">
         <button id="start-btn">START</button>
       </div>
       <div class="controls-divider"></div>
       <span class="controls-hint">Click the map to set a destination · Drag robots to reposition</span>
     </footer>
+
 
   </div><!-- /#app-shell -->
 
