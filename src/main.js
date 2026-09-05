@@ -38,6 +38,13 @@ import {
 } from './simulation/runSession.js';
 import { finaliseMetrics, compareRunMetrics } from './simulation/runMetrics.js';
 import { createComparisonPanel } from './ui/comparisonPanel.js';
+import {
+  connectEdge,
+  disconnectEdge,
+  predictRobot,
+  isEdgeConnected,
+  buildRobotFeatures
+} from './network/edgeClient.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 class WarehouseScene extends Phaser.Scene {
@@ -328,7 +335,18 @@ class WarehouseScene extends Phaser.Scene {
           if (r && !r.completedAt) {
             r.completedAt = new Date().toISOString();
           }
-        }
+        },
+        onWaitTime: (robotId, durationSec) => {
+          if (activeRunSession && activeRunSession.status === 'RUNNING' && durationSec > 0) {
+            activeRunSession.metrics.totalWaitingTimeSec = parseFloat(
+              (activeRunSession.metrics.totalWaitingTimeSec + durationSec).toFixed(3)
+            );
+          }
+        },
+        findPath,
+        getRunMode: () => (activeRunSession ? activeRunSession.mode : selectedRunMode),
+        getConflicts,
+        updatePathVisualization: (robotId) => updatePathVisualization(robotId)
       });
 
     /**
@@ -742,6 +760,59 @@ class WarehouseScene extends Phaser.Scene {
     window.completedRuns = completedRuns;
     window.compareRunMetrics = compareRunMetrics;
     window.comparisonPanel = comparisonPanel;
+
+    // ── Local Edge Coordinator Integration ────────────────────────────────────
+    connectEdge();
+
+    window.connectEdge = connectEdge;
+    window.disconnectEdge = disconnectEdge;
+    window.predictRobot = predictRobot;
+    window.isEdgeConnected = isEdgeConnected;
+    window.edgeConnected = Boolean(window.edgeConnected);
+    window.robotDecisionState = window.robotDecisionState || {};
+    window.robotMovementDecisionState = window.robotMovementDecisionState || {};
+    window.edgeDecisionStats = window.edgeDecisionStats || {
+      totalPredictions: 0,
+      move: 0,
+      slow: 0,
+      wait: 0,
+      reroute: 0
+    };
+
+    const lastTelemetryTimes = new Map();
+
+    this.time.addEvent({
+      delay: 200,
+      loop: true,
+      callback: () => {
+        // When RUN MODE = BASELINE, do NOT call the edge backend
+        const currentMode = activeRunSession ? activeRunSession.mode : selectedRunMode;
+        if (currentMode !== RUN_MODES.OPTIMIZED) {
+          return;
+        }
+
+        const now = Date.now();
+        const currentConflicts = getConflicts();
+
+        for (const [robotId, robot] of Object.entries(robots)) {
+          // Only send robots that are currently moving/running
+          if (!robot || robot.status !== 'moving') {
+            continue;
+          }
+
+          // Rate limit: at most once every 500ms per robot
+          const lastSent = lastTelemetryTimes.get(robotId) || 0;
+          if (now - lastSent < 500) {
+            continue;
+          }
+          lastTelemetryTimes.set(robotId, now);
+
+          // Convert robot state into 24 ML features and request prediction
+          const features = buildRobotFeatures(robot, robots, currentConflicts, map);
+          predictRobot(robotId, features).catch(() => {});
+        }
+      }
+    });
   }
 }
 

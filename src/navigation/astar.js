@@ -67,7 +67,7 @@ export function createPathfinder(map, roadsLayer) {
    * @param {number} targetTileY
    * @returns {{ navX: number, navY: number, tileX: number, tileY: number, worldX: number, worldY: number }[] | null}
    */
-  const findPath = (startTileX, startTileY, targetTileX, targetTileY) => {
+  const findPath = (startTileX, startTileY, targetTileX, targetTileY, blockedCoords = []) => {
     const startNode  = resolveNode(startTileX, startTileY);
     const targetNode = resolveNode(targetTileX, targetTileY);
 
@@ -79,6 +79,14 @@ export function createPathfinder(map, roadsLayer) {
     if (startNode.navX === targetNode.navX && startNode.navY === targetNode.navY) {
       return [{ ...startNode }];
     }
+
+    const blockedSet = new Set(
+      blockedCoords.map((c) => {
+        if (typeof c === 'string') return c;
+        const n = resolveNode(c.tileX ?? c.navX, c.tileY ?? c.navY);
+        return n ? `${n.navX},${n.navY}` : `${c.tileX},${c.tileY}`;
+      })
+    );
 
     const keyOf = (x, y) => `${x},${y}`;
     const heuristic = (x, y) => Math.abs(x - targetNode.navX) + Math.abs(y - targetNode.navY);
@@ -117,6 +125,8 @@ export function createPathfinder(map, roadsLayer) {
         const nx = neighbor.navX;
         const ny = neighbor.navY;
         const neighborKey = keyOf(nx, ny);
+        if (blockedSet.size > 0 && blockedSet.has(neighborKey)) continue;
+
         const tentativeG  = currentG + 1;
 
         if (tentativeG < (gScore.get(neighborKey) ?? Infinity)) {
