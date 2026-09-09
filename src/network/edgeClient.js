@@ -254,7 +254,12 @@ export function buildRobotFeatures(robot, allRobots = {}, conflicts = [], map = 
 
   // 9. Conflict inspection derived from EXISTING predictive conflict detection
   const robotConflicts = Array.isArray(conflicts)
-    ? conflicts.filter((c) => c && (c.robotA === robot.id || c.robotB === robot.id))
+    ? conflicts.filter((c) => {
+        if (!c || (c.robotA !== robot.id && c.robotB !== robot.id)) return false;
+        const otherId = c.robotA === robot.id ? c.robotB : c.robotA;
+        const other = allRobots[otherId];
+        return !other || other.status !== 'completed';
+      })
     : [];
 
   const obstacleDetected = robotConflicts.length > 0 ? 1 : 0;

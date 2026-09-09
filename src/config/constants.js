@@ -16,6 +16,9 @@ export const DEFAULT_SPEED = 100; // pixels per second
 // ─── Conflict detection ───────────────────────────────────────────────────────
 // Two robots occupying the same tile within this window (seconds) is a conflict.
 export const CONFLICT_TIME_THRESHOLD = 0.75;
+export const SAFE_TIME_BUFFER = 0.25;
+export const SAFE_TIME_SEPARATION = 1.0;
+export const MAX_PLAUSIBLE_DELAY_SEC = 3.5;
 
 export const MAX_ROBOTS = 20;
 
