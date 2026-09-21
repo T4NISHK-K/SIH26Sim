@@ -4,126 +4,243 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AMR Fleet Coordination Dashboard</title>
-  <meta name="description" content="Edge-AI Based Distributed AMR Fleet Coordination Simulation — SIH 2026" />
+  <title>ARES — Autonomous Robot Edge Coordination System</title>
+  <meta name="description" content="ARES: Autonomous Robot Edge Coordination System — Smart Warehouse AMR Fleet Control & Edge-AI Coordination" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/src/ui/dashboard.css" />
 </head>
 
 <body>
 
   <!-- ═══════════════════════════════════════════════════════════
-       APP SHELL — three-row grid: header / workspace / controls
+       APP SHELL — 3-Row Grid: Header / 3-Column Workspace / Metrics
   ════════════════════════════════════════════════════════════ -->
   <div id="app-shell">
 
-    <!-- ── 1. TOP HEADER ───────────────────────────────────────── -->
+    <!-- ── 1. TOP HEADER (WARM MINIMALIST BRANDING) ────────────── -->
     <header id="dashboard-header">
-      <div class="header-brand">
-        <span class="header-title">AMR Fleet Coordination Dashboard</span>
-        <span class="header-subtitle">Edge-AI Based Distributed Fleet Coordination</span>
+      <div class="header-left">
+        <div class="header-brand-logo-mark">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L2 22H7L12 12L17 22H22L12 2Z" fill="#222222" />
+            <path d="M10 16L12 12L14 16H10Z" fill="#FAF9F5" />
+          </svg>
+        </div>
+        <div class="header-brand">
+          <span class="header-brand-title">ARES</span>
+          <span class="header-subtitle">Autonomous Robot Edge Coordination System</span>
+        </div>
       </div>
 
-      <div class="header-divider"></div>
+      <!-- Center Minimalist Navigation Tabs -->
+      <nav class="header-nav" aria-label="Main Navigation">
+        <button class="header-nav-tab header-nav-tab--active" id="nav-tab-simulation" data-tab="simulation" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M14 8h4"/><path d="M14 12h4"/><path d="M14 16h4"/></svg>
+          Simulation
+        </button>
+        <button class="header-nav-tab" id="nav-tab-robots" data-tab="robots" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="12" rx="2"/><circle cx="9" cy="13" r="1" fill="currentColor"/><circle cx="15" cy="13" r="1" fill="currentColor"/><path d="M12 4v4"/></svg>
+          Robots
+        </button>
+        <button class="header-nav-tab" id="nav-tab-analytics" data-tab="analytics" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+          Analytics
+        </button>
+        <button class="header-nav-tab" id="nav-tab-scenarios" data-tab="scenarios" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Scenarios
+        </button>
+      </nav>
 
-      <div class="header-status-indicator">
-        <span class="header-status-dot"></span>
-        Simulation Active
+      <!-- Right Telemetry & Status Readouts -->
+      <div class="header-right">
+        <div class="header-status-indicator">
+          <span class="header-status-dot status-dot-safe"></span>
+          <span class="header-status-text">System Online</span>
+        </div>
+
+        <div class="header-status-indicator">
+          <span class="header-status-dot status-dot-charcoal"></span>
+          <span class="header-status-text">Edge AI Active</span>
+        </div>
+
+        <div class="header-timestamp" id="header-timestamp">
+          20 September, 2026 &nbsp;·&nbsp; 14:28:36
+        </div>
+
+        <div class="header-avatar" title="System Operator">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
       </div>
-
-      <div class="header-spacer"></div>
-
-      <span class="header-badge">SIH 2026</span>
     </header>
 
-    <!-- ── 2. MAIN WORKSPACE ───────────────────────────────────── -->
+    <!-- ── 2. MAIN WORKSPACE (3-COLUMN LAYOUT) ──────────────────── -->
     <div id="dashboard-workspace">
 
-      <!-- 2a. MAP WORKSPACE (left) -->
-      <section id="map-workspace" aria-label="Warehouse Map">
+      <!-- 2a. LEFT CONTROL PANEL (Clean Stacked Cards) -->
+      <aside id="left-control-panel" class="workspace-col left-panel">
+        
+        <!-- Card 1: Simulation Control -->
+        <div class="ares-card ctrl-card">
+          <div class="ares-card-header">
+            <div class="card-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span class="card-title">Simulation Control</span>
+            </div>
+            <span class="card-info-icon" id="mode-info-icon" title="Select the coordination mode for the simulation." role="button" aria-label="Simulation Mode Information">ⓘ</span>
+          </div>
+
+          <div class="ctrl-group">
+            <div class="ctrl-label-row">
+              <label class="ctrl-label" for="run-mode-toggle">Mode</label>
+            </div>
+            <div class="run-mode-selector" id="run-mode-selector">
+              <div class="run-mode-toggle" id="run-mode-toggle" role="group" aria-label="Run Mode">
+                <button class="run-mode-btn run-mode-btn--active" id="btn-mode-baseline" data-mode="BASELINE" type="button" title="Baseline: uncoordinated autonomous navigation">Baseline</button>
+                <button class="run-mode-btn" id="btn-mode-optimized" data-mode="OPTIMIZED" type="button" title="ARES Optimized: Edge AI distributed coordination">ARES Optimized</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ctrl-group dropdown-container" id="scenario-dropdown-container">
+            <div class="ctrl-label-row">
+              <span class="ctrl-label">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                Scenario
+              </span>
+            </div>
+            <div class="scenario-quick-selector" id="scenario-quick-selector" tabindex="0" role="button" aria-haspopup="listbox" aria-expanded="false" title="Click to select an existing scenario">
+              <span class="scenario-quick-val" id="scenario-quick-val">Select Scenario</span>
+              <span class="scenario-quick-chevron">▾</span>
+            </div>
+            <div id="scenario-dropdown-menu" class="ares-dropdown-menu" style="display: none;" role="listbox"></div>
+          </div>
+
+          <div class="ctrl-group dropdown-container" id="fleet-dropdown-container">
+            <div class="ctrl-label-row">
+              <span class="ctrl-label">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="12" rx="2"/><circle cx="9" cy="13" r="1" fill="currentColor"/><circle cx="15" cy="13" r="1" fill="currentColor"/></svg>
+                Robots
+              </span>
+            </div>
+            <div class="fleet-count-box" id="fleet-count-box" tabindex="0" role="button" aria-haspopup="listbox" aria-expanded="false" title="Click to view fleet units and options">
+              <span id="fleet-count-val" class="fleet-count-val">0 ROBOTS</span>
+              <span class="fleet-count-chevron">▾</span>
+            </div>
+            <div id="fleet-dropdown-menu" class="ares-dropdown-menu" style="display: none;" role="listbox"></div>
+            <div id="fleet-limit-notice" class="fleet-limit-notice" style="display: none;">Fleet limit reached</div>
+          </div>
+
+          <div class="ctrl-actions">
+            <button id="start-all-btn" class="btn-primary" type="button">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg>
+              Start Simulation
+            </button>
+            <button id="start-btn" class="btn-secondary" type="button">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Start Selected Unit
+            </button>
+          </div>
+        </div>
+
+        <!-- Card 2: Coordination Systems -->
+        <div class="ares-card coord-card">
+          <div class="ares-card-header">
+            <div class="card-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              <span class="card-title">Coordination Systems</span>
+            </div>
+          </div>
+
+          <div class="coord-status-list">
+            <div class="coord-status-item">
+              <span class="coord-name">Edge AI</span>
+              <span class="coord-pill"><span class="coord-dot"></span> Active</span>
+            </div>
+            <div class="coord-status-item">
+              <span class="coord-name">Local Radius</span>
+              <span class="coord-pill"><span class="coord-dot"></span> Active</span>
+            </div>
+            <div class="coord-status-item">
+              <span class="coord-name">Conflict Analysis</span>
+              <span class="coord-pill"><span class="coord-dot"></span> Active</span>
+            </div>
+            <div class="coord-status-item">
+              <span class="coord-name">A* Navigation</span>
+              <span class="coord-pill"><span class="coord-dot"></span> Active</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Map Controls -->
+        <div class="ares-card map-ctrls-card">
+          <div class="ares-card-header">
+            <div class="card-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+              <span class="card-title">Map Controls</span>
+            </div>
+          </div>
+
+          <div class="map-viewport-controls" id="map-viewport-controls" aria-label="Map Viewport Controls">
+            <button class="map-ctrl-btn" id="btn-zoom-in" title="Zoom In (+)" aria-label="Zoom In">+</button>
+            <button class="map-ctrl-btn" id="btn-zoom-out" title="Zoom Out (−)" aria-label="Zoom Out">−</button>
+            <button class="map-ctrl-btn map-ctrl-btn-reset" id="btn-reset-view" title="Reset View" aria-label="Reset View">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Hidden container for rail metrics so existing robotControls.js updates them seamlessly -->
+        <div id="fleet-overview-rail" style="display: none;"></div>
+
+      </aside>
+
+      <!-- 2b. CENTER COLUMN (WAREHOUSE SIMULATION MAP FOCUS) ────── -->
+      <section id="map-workspace" aria-label="Warehouse Map" class="workspace-col map-center">
+        <!-- Floating Header Bar above Map Frame -->
+        <div class="map-header-bar">
+          <div class="map-tag-info">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+            <span class="map-tag-title">ARES Warehouse</span>
+            <span class="tag-sep">|</span>
+            <span class="map-tag-dims">60 × 40 tiles</span>
+            <span class="tag-sep">|</span>
+            <span class="map-tag-px">1920 × 1280 px</span>
+          </div>
+
+          <div class="map-legend">
+            <span class="legend-item"><span class="legend-dot dot-robot"></span> Robot</span>
+            <span class="legend-item"><span class="legend-dot dot-dest"></span> Destination</span>
+            <span class="legend-item"><span class="legend-line"></span> Path</span>
+          </div>
+        </div>
+
         <!-- Compact 3:2 Map Frame -->
         <div id="map-frame">
-          <div class="map-viewport-tag">
-            <span class="map-viewport-dot"></span>
-            Warehouse Map · 60 × 40
-          </div>
-
-          <!-- Interactive Viewport Controls (Top Right Overlay) -->
-          <div class="map-viewport-controls" id="map-viewport-controls" aria-label="Map Viewport Controls">
-            <div class="map-controls-btn-row">
-              <button class="map-ctrl-btn" id="btn-zoom-in" title="Zoom In (+)" aria-label="Zoom In">+</button>
-              <button class="map-ctrl-btn" id="btn-zoom-out" title="Zoom Out (−)" aria-label="Zoom Out">−</button>
-            </div>
-            <button class="map-ctrl-btn map-ctrl-btn-reset" id="btn-reset-view" title="Reset View" aria-label="Reset View">Reset</button>
-          </div>
-
           <!-- Phaser mounts its canvas here — parent: 'game-container' in main.js -->
           <div id="game-container"></div>
         </div>
-
-        <!-- Auxiliary Live Fleet Overview Rail (Compact monitoring panel) -->
-        <aside id="fleet-overview-rail" aria-label="Live Fleet Overview">
-          <div class="overview-rail-header">
-            <span class="overview-rail-dot"></span>
-            <span class="overview-rail-title">Live Fleet Overview</span>
-          </div>
-
-          <div class="overview-metric-card">
-            <span class="overview-metric-label">Fleet</span>
-            <span class="overview-metric-val" id="ov-fleet-val">0 <span class="ov-unit">ROBOTS</span></span>
-          </div>
-
-          <div class="overview-metric-grid">
-            <div class="overview-submetric">
-              <span class="overview-submetric-label">Active</span>
-              <span class="overview-submetric-val val-active" id="ov-active-val">0</span>
-            </div>
-            <div class="overview-submetric">
-              <span class="overview-submetric-label">Moving</span>
-              <span class="overview-submetric-val val-moving" id="ov-moving-val">0</span>
-            </div>
-            <div class="overview-submetric">
-              <span class="overview-submetric-label">Idle</span>
-              <span class="overview-submetric-val val-idle" id="ov-idle-val">0</span>
-            </div>
-            <div class="overview-submetric">
-              <span class="overview-submetric-label">Completed</span>
-              <span class="overview-submetric-val val-completed" id="ov-completed-val">0</span>
-            </div>
-          </div>
-
-          <div class="overview-metric-card overview-conflict-card">
-            <span class="overview-metric-label">Conflicts</span>
-            <span class="overview-metric-val val-conflicts" id="ov-conflicts-val">0</span>
-          </div>
-        </aside>
       </section>
 
-      <!-- 2b. FLEET MANAGEMENT PANEL (right) -->
-      <aside id="fleet-panel" aria-label="Robot Management">
-
-        <!-- Fixed Header -->
-        <div class="panel-header">
-          <span class="panel-title">Robot Management</span>
-        </div>
-
-        <!-- Fixed Top Controls -->
-        <div class="panel-fixed-controls">
-          <div class="fleet-actions-section">
-            <button id="btn-add-robot" class="add-robot-btn" type="button">+ ADD ROBOT</button>
-            <div class="fleet-count-box">
-              <span class="fleet-count-label">FLEET</span>
-              <span id="fleet-count-val" class="fleet-count-val">0 ROBOTS</span>
+      <!-- 2c. RIGHT COLUMN (ROBOT DETAILS, TELEMETRY & EVENTS) ──── -->
+      <aside id="fleet-panel" aria-label="Robot Management" class="workspace-col right-panel">
+        
+        <!-- Card 1: Robot Details -->
+        <div class="ares-card robot-details-card">
+          <div class="ares-card-header">
+            <div class="card-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="12" rx="2"/><circle cx="9" cy="13" r="1" fill="currentColor"/><circle cx="15" cy="13" r="1" fill="currentColor"/><path d="M12 4v4"/></svg>
+              <span class="card-title">Robot Details</span>
+            </div>
+            <div class="card-header-right">
+              <button id="btn-add-robot" class="add-robot-btn" type="button" title="Add Robot to Fleet">+ Add</button>
             </div>
           </div>
-          <div id="fleet-limit-notice" class="fleet-limit-notice" style="display: none;">Fleet limit reached</div>
-        </div>
 
-        <!-- Scrollable Management Content -->
-        <div class="panel-scroll-content">
-
-          <!-- Robot selector (Fleet Cards) -->
+          <!-- Robot Selector Chips / Dropdown List -->
           <div class="fleet-section">
-            <span class="section-label">Select Robot</span>
             <div id="robot-selector">
               <div class="robot-selector-empty">No robots configured</div>
             </div>
@@ -131,12 +248,11 @@
 
           <!-- Robot Configuration Section -->
           <div class="fleet-section" id="robot-config-section">
-            <span class="section-label">Robot Configuration</span>
-
             <!-- Empty state when selectedRobotId === null -->
             <div id="config-empty-state" class="config-empty-card">
-              <div class="config-empty-title">No robot selected</div>
-              <div class="config-empty-hint">Select or add a robot to configure.</div>
+              <div class="config-empty-icon">⬚</div>
+              <div class="config-empty-title">No Robot Selected</div>
+              <div class="config-empty-hint">Select a unit from the fleet above to inspect telemetry and adjust parameters.</div>
             </div>
 
             <!-- Configuration Form when a robot is selected -->
@@ -162,8 +278,11 @@
               <!-- Battery -->
               <div class="config-field">
                 <div class="config-battery-header">
-                  <label for="config-battery-input" class="config-label">Battery</label>
+                  <label for="config-battery-input" class="config-label">Battery Level</label>
                   <span id="config-battery-val" class="config-battery-val">100%</span>
+                </div>
+                <div class="battery-track">
+                  <div class="battery-fill" id="battery-fill-bar" style="width: 100%;"></div>
                 </div>
                 <input type="range" id="config-battery-input" class="config-slider" min="0" max="100" step="1" value="100" />
               </div>
@@ -193,124 +312,238 @@
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Fleet conflicts -->
-          <div class="fleet-section" id="conflict-section">
-            <div class="conflict-section-header">
-              <span class="section-label">Fleet Conflicts</span>
-              <span id="conflict-count-badge">0</span>
-            </div>
-            <div id="conflict-list">
-              <span style="color: var(--color-text-muted); font-style: italic; font-size: 11px;">No predicted conflicts</span>
+        <!-- Card 2: Local Interaction -->
+        <div class="ares-card local-interaction-card">
+          <div class="ares-card-header">
+            <div class="card-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              <span class="card-title">Local Interaction</span>
             </div>
           </div>
 
-          <!-- Run Comparison Section -->
-          <div class="fleet-section" id="comparison-section">
-            <div class="comparison-section-header">
-              <span class="section-label">Run Comparison</span>
+          <div class="interaction-rows">
+            <div class="interaction-row">
+              <span class="interaction-label">Nearby Robots</span>
+              <span class="interaction-val">3</span>
             </div>
-            <div id="comparison-message" class="comparison-hint">
-              Run both modes to compare results.
+            <div class="interaction-row">
+              <span class="interaction-label">Nearest Robot</span>
+              <span class="interaction-val">1.8 m</span>
             </div>
-            <div id="comparison-content" class="comparison-content" style="display: none;">
-              <table class="comparison-table">
-                <thead>
-                  <tr>
-                    <th class="cmp-col-metric">Metric</th>
-                    <th class="cmp-col-val">BASELINE</th>
-                    <th class="cmp-col-val">OPTIMIZED</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="cmp-row-label">Completion Time</td>
-                    <td class="cmp-val" id="cmp-time-baseline">—</td>
-                    <td class="cmp-val" id="cmp-time-optimized">—</td>
-                  </tr>
-                  <tr>
-                    <td class="cmp-row-label">Distance</td>
-                    <td class="cmp-val" id="cmp-dist-baseline">—</td>
-                    <td class="cmp-val" id="cmp-dist-optimized">—</td>
-                  </tr>
-                  <tr>
-                    <td class="cmp-row-label">Conflicts</td>
-                    <td class="cmp-val" id="cmp-conf-baseline">—</td>
-                    <td class="cmp-val" id="cmp-conf-optimized">—</td>
-                  </tr>
-                  <tr>
-                    <td class="cmp-row-label">Collisions</td>
-                    <td class="cmp-val" id="cmp-coll-baseline">—</td>
-                    <td class="cmp-val" id="cmp-coll-optimized">—</td>
-                  </tr>
-                  <tr>
-                    <td class="cmp-row-label">Completion Rate</td>
-                    <td class="cmp-val" id="cmp-rate-baseline">—</td>
-                    <td class="cmp-val" id="cmp-rate-optimized">—</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="interaction-row">
+              <span class="interaction-label">Interaction Radius</span>
+              <span class="interaction-val">3.2 m</span>
+            </div>
+          </div>
+        </div>
 
-              <div class="comparison-summaries">
-                <div class="cmp-summary-row">
-                  <span class="cmp-summary-label">Completion Time Improvement:</span>
-                  <span class="cmp-summary-val" id="cmp-imp-time">—</span>
-                </div>
-                <div class="cmp-summary-row">
-                  <span class="cmp-summary-label">Distance Improvement:</span>
-                  <span class="cmp-summary-val" id="cmp-imp-dist">—</span>
-                </div>
-                <div class="cmp-summary-row">
-                  <span class="cmp-summary-label">Conflict Reduction:</span>
-                  <span class="cmp-summary-val" id="cmp-imp-conf">—</span>
-                </div>
+        <!-- Card 3: AI Decision -->
+        <div class="ares-card ai-decision-card">
+          <div class="ares-card-header">
+            <div class="card-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 12L2.5 7.5"/><path d="M12 12v9"/></svg>
+              <span class="card-title">AI Decision</span>
+            </div>
+          </div>
+
+          <div class="ai-decision-body">
+            <div class="ai-decision-row">
+              <div class="ai-decision-badge">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 18 12 6 20 6 4"/></svg>
+                <span>MOVE</span>
+              </div>
+              <div class="ai-confidence-block">
+                <span class="ai-confidence-label">Confidence</span>
+                <span class="ai-confidence-val">91%</span>
+              </div>
+            </div>
+            <div class="ai-confidence-track">
+              <div class="ai-confidence-bar" style="width: 91%;"></div>
+            </div>
+            <div class="ai-decision-note">
+              <span class="ai-note-icon">ⓘ</span>
+              Path clear • No temporal conflict detected
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Recent Events / Conflicts -->
+        <div class="ares-card conflicts-card" id="conflict-section">
+          <div class="ares-card-header">
+            <div class="card-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span class="card-title">Recent Events</span>
+            </div>
+            <span id="conflict-count-badge" class="conflict-badge">0</span>
+          </div>
+          <div id="conflict-list" class="conflict-list-container">
+            <div class="recent-events-placeholder">
+              <div class="event-item"><span class="event-dot"></span><span class="event-time">14:28</span><span class="event-text">Fleet synchronized to grid</span></div>
+              <div class="event-item"><span class="event-dot"></span><span class="event-time">14:25</span><span class="event-text">No active spatial conflicts</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 5: Run Comparison -->
+        <div class="ares-card comparison-card" id="comparison-section">
+          <div class="ares-card-header">
+            <div class="card-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+              <span class="card-title">Run Comparison</span>
+            </div>
+          </div>
+          <div id="comparison-message" class="comparison-hint">
+            Run both modes to compare results.
+          </div>
+          <div id="comparison-content" class="comparison-content" style="display: none;">
+            <table class="comparison-table">
+              <thead>
+                <tr>
+                  <th class="cmp-col-metric">Metric</th>
+                  <th class="cmp-col-val">Baseline</th>
+                  <th class="cmp-col-val">ARES</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="cmp-row-label">Completion Time</td>
+                  <td class="cmp-val" id="cmp-time-baseline">—</td>
+                  <td class="cmp-val" id="cmp-time-optimized">—</td>
+                </tr>
+                <tr>
+                  <td class="cmp-row-label">Distance</td>
+                  <td class="cmp-val" id="cmp-dist-baseline">—</td>
+                  <td class="cmp-val" id="cmp-dist-optimized">—</td>
+                </tr>
+                <tr>
+                  <td class="cmp-row-label">Conflicts</td>
+                  <td class="cmp-val" id="cmp-conf-baseline">—</td>
+                  <td class="cmp-val" id="cmp-conf-optimized">—</td>
+                </tr>
+                <tr>
+                  <td class="cmp-row-label">Collisions</td>
+                  <td class="cmp-val" id="cmp-coll-baseline">—</td>
+                  <td class="cmp-val" id="cmp-coll-optimized">—</td>
+                </tr>
+                <tr>
+                  <td class="cmp-row-label">Completion Rate</td>
+                  <td class="cmp-val" id="cmp-rate-baseline">—</td>
+                  <td class="cmp-val" id="cmp-rate-optimized">—</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="comparison-summaries">
+              <div class="cmp-summary-row">
+                <span class="cmp-summary-label">Time Improvement:</span>
+                <span class="cmp-summary-val" id="cmp-imp-time">—</span>
+              </div>
+              <div class="cmp-summary-row">
+                <span class="cmp-summary-label">Distance Delta:</span>
+                <span class="cmp-summary-val" id="cmp-imp-dist">—</span>
+              </div>
+              <div class="cmp-summary-row">
+                <span class="cmp-summary-label">Conflict Reduction:</span>
+                <span class="cmp-summary-val" id="cmp-imp-conf">—</span>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Scenarios Section -->
-          <div class="fleet-section" id="scenarios-section">
-            <div class="scenarios-header-row">
-              <span class="section-label">Scenarios</span>
+        <!-- Card 6: Scenario Profiles -->
+        <div class="ares-card scenarios-card" id="scenarios-section">
+          <div class="ares-card-header">
+            <div class="card-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span class="card-title">Saved Scenarios</span>
             </div>
-            <button id="btn-save-scenario" class="scenario-save-action-btn" type="button">SAVE SCENARIO</button>
-            <div id="scenario-active-bar" class="scenario-active-bar" style="display: none;">
-              <div class="active-bar-info">
-                <span class="active-dot"></span>
-                <span class="active-label">Editing:</span>
-                <span id="active-scenario-name" class="active-name">Scenario</span>
-              </div>
-              <button id="btn-save-scenario-changes" class="btn-save-changes" type="button" title="Save fleet changes to this scenario">SAVE CHANGES</button>
-            </div>
-            <div id="scenario-feedback-msg" class="scenario-feedback-msg" style="display: none;"></div>
-            <div class="scenarios-sub-header">
-              <span class="scenarios-sub-label">Saved Scenarios</span>
-            </div>
-            <div id="scenarios-list" class="scenarios-list">
-              <div class="scenario-empty-hint">No saved scenarios</div>
-            </div>
+            <button id="btn-save-scenario" class="scenario-save-action-btn" type="button">Save Profile</button>
           </div>
 
-        </div><!-- /.panel-scroll-content -->
-      </aside><!-- /#fleet-panel -->
+          <div id="scenario-active-bar" class="scenario-active-bar" style="display: none;">
+            <div class="active-bar-info">
+              <span class="active-dot"></span>
+              <span class="active-label">Editing:</span>
+              <span id="active-scenario-name" class="active-name">Scenario</span>
+            </div>
+            <button id="btn-save-scenario-changes" class="btn-save-changes" type="button">Save</button>
+          </div>
+          <div id="scenario-feedback-msg" class="scenario-feedback-msg" style="display: none;"></div>
+
+          <div id="scenarios-list" class="scenarios-list">
+            <div class="scenario-empty-hint">No saved scenarios</div>
+          </div>
+        </div>
+
+      </aside>
 
     </div><!-- /#dashboard-workspace -->
 
-    <!-- ── 3. SIMULATION CONTROLS BAR ─────────────────────────── -->
-    <footer id="simulation-controls">
-      <span class="controls-label">Simulation Controls</span>
-      <div class="controls-divider"></div>
+    <!-- ── 3. BOTTOM FLEET METRICS BAR ────────────────────────── -->
+    <footer id="simulation-controls" class="fleet-metrics-footer">
+      <div class="metrics-bar-left">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span class="metrics-bar-title">Fleet Metrics</span>
+      </div>
 
-      <!-- Run Mode Selector -->
-      <div class="run-mode-selector" id="run-mode-selector">
-        <span class="run-mode-label">RUN MODE</span>
-        <div class="run-mode-toggle" id="run-mode-toggle" role="group" aria-label="Run Mode">
-          <button class="run-mode-btn run-mode-btn--active" id="btn-mode-baseline" data-mode="BASELINE" type="button" title="Baseline: existing robot movement, no AI coordination">BASELINE</button>
-          <button class="run-mode-btn" id="btn-mode-optimized" data-mode="OPTIMIZED" type="button" title="Optimized: AI coordination enabled (ML integration coming)">OPTIMIZED</button>
+      <div class="metrics-strip">
+        <div class="metric-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span class="metric-label">Collisions</span>
+          <span class="metric-val" id="ov-conflicts-val">0</span>
+        </div>
+
+        <div class="metric-divider"></div>
+
+        <div class="metric-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span class="metric-label">Deadlocks</span>
+          <span class="metric-val">0</span>
+        </div>
+
+        <div class="metric-divider"></div>
+
+        <div class="metric-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span class="metric-label">Avg. Waiting Time</span>
+          <span class="metric-val">1.2 s</span>
+        </div>
+
+        <div class="metric-divider"></div>
+
+        <div class="metric-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+          <span class="metric-label">Task Completion Time</span>
+          <span class="metric-val">42.8 s</span>
+        </div>
+
+        <div class="metric-divider"></div>
+
+        <div class="metric-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>
+          <span class="metric-label">Total Distance</span>
+          <span class="metric-val">1,284 m</span>
+        </div>
+
+        <div class="metric-divider"></div>
+
+        <div class="metric-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span class="metric-label">Throughput</span>
+          <span class="metric-val">18 / min</span>
         </div>
       </div>
 
-      <div class="controls-divider"></div>
+      <!-- Live telemetry values connected to robotControls.js -->
+      <div class="metrics-hidden-hooks" style="display: none;">
+        <span id="ov-fleet-val">0 ROBOTS</span>
+        <span id="ov-active-val">0</span>
+        <span id="ov-moving-val">0</span>
+        <span id="ov-idle-val">0</span>
+        <span id="ov-completed-val">0</span>
+      </div>
 
       <!-- Run Status Readout (visible after scenario load) -->
       <div class="run-status-display" id="run-status-display" style="display:none;">
@@ -319,14 +552,13 @@
         <span class="run-status-val" id="run-status-val">IDLE</span>
       </div>
 
-      <div class="controls-group">
-        <button id="start-btn">START</button>
-        <button id="start-all-btn">START ALL</button>
+      <div class="metrics-bar-right">
+        <button class="btn-comparison-trigger" type="button" onclick="document.getElementById('comparison-section')?.scrollIntoView({behavior:'smooth'})">
+          View Comparison
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
       </div>
-      <div class="controls-divider"></div>
-      <span class="controls-hint">Click the map to set a destination · Drag robots to reposition</span>
     </footer>
-
 
   </div><!-- /#app-shell -->
 
@@ -337,16 +569,16 @@
   <div id="modal-save-scenario" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="save-modal-title">
     <div class="modal-card">
       <div class="modal-header">
-        <span id="save-modal-title" class="modal-title">Save Scenario</span>
+        <span id="save-modal-title" class="modal-title">Save Scenario Profile</span>
       </div>
       <div class="modal-body">
-        <label for="input-scenario-name" class="modal-label">Scenario Name:</label>
-        <input type="text" id="input-scenario-name" class="modal-input" placeholder="e.g. Intersection Test" maxlength="40" autocomplete="off" />
+        <label for="input-scenario-name" class="modal-label">Profile Name:</label>
+        <input type="text" id="input-scenario-name" class="modal-input" placeholder="e.g. Intersection Crossing" maxlength="40" autocomplete="off" />
         <div id="scenario-save-error" class="modal-error" style="display: none;"></div>
       </div>
       <div class="modal-footer">
-        <button id="btn-cancel-save-scenario" class="modal-btn modal-btn-secondary" type="button">CANCEL</button>
-        <button id="btn-confirm-save-scenario" class="modal-btn modal-btn-primary" type="button">SAVE</button>
+        <button id="btn-cancel-save-scenario" class="modal-btn modal-btn-secondary" type="button">Cancel</button>
+        <button id="btn-confirm-save-scenario" class="modal-btn modal-btn-primary" type="button">Save Profile</button>
       </div>
     </div>
   </div>
@@ -355,14 +587,14 @@
   <div id="modal-delete-scenario" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
     <div class="modal-card">
       <div class="modal-header">
-        <span id="delete-modal-title" class="modal-title">Delete Scenario?</span>
+        <span id="delete-modal-title" class="modal-title">Delete Scenario Profile?</span>
       </div>
       <div class="modal-body">
         <p class="modal-desc">Are you sure you want to delete <strong id="delete-scenario-name">this scenario</strong>? This action cannot be undone.</p>
       </div>
       <div class="modal-footer">
-        <button id="btn-cancel-delete-scenario" class="modal-btn modal-btn-secondary" type="button">CANCEL</button>
-        <button id="btn-confirm-delete-scenario" class="modal-btn modal-btn-danger" type="button">DELETE</button>
+        <button id="btn-cancel-delete-scenario" class="modal-btn modal-btn-secondary" type="button">Cancel</button>
+        <button id="btn-confirm-delete-scenario" class="modal-btn modal-btn-danger" type="button">Delete</button>
       </div>
     </div>
   </div>

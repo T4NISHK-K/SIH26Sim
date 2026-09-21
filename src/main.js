@@ -23,6 +23,7 @@ import { createMovementController } from './robots/robotMovement.js';
 import { setupRobotDrag } from './robots/robotDrag.js';
 import { createUIController } from './ui/robotControls.js';
 import { setupMapControls } from './ui/mapControls.js';
+import { setupDashboardControls } from './ui/dashboardControls.js';
 import { CONFLICT_TIME_THRESHOLD, MAX_ROBOTS } from './config/constants.js';
 import { scenarioService } from './scenarios/scenarioService.js';
 import { scenarioRepository } from './scenarios/scenarioRepository.js';
@@ -482,8 +483,93 @@ class WarehouseScene extends Phaser.Scene {
     // Now that uiController exists, wire the conflict panel callback
     updateConflictPanelFn = (conflicts) => uiController.updateConflictPanel(conflicts);
 
-    // ── scenarioManagerRef — forward reference populated after createScenarioManager ─
+    // ── Forward references populated after controller creation ──────────────────
     let scenarioManagerRef = null;
+    let dashboardControlsRef = null;
+
+    // ── Execute scenario load sequence (reused by scenarioManager and dashboardControls) ─
+    const executeLoadScenario = (scenario) => {
+      if (!scenario || !Array.isArray(scenario.robots)) return;
+
+      // ── Create a FRESH runtime session from the persisted scenario ─────────
+      // Deep copies robot snapshots so the saved scenario is never mutated by
+      // runtime movement. Loading the same scenario again always resets to
+      // the original saved positions.
+      // Reset run mode to BASELINE on every fresh scenario load
+      selectedRunMode = RUN_MODES.BASELINE;
+      syncModeSelectorUI();
+      setModeSelectorDisabled(false);
+      setStartAllDisabled(false);
+
+      // ── Create fresh session — mode defaults to BASELINE on load ──────────
+      // The existing deepCopySnapshot / initialSnapshots isolation is fully
+      // preserved inside createRunSession; mode is additive metadata only.
+      activeRunSession = createRunSession(scenario.id, scenario.robots, selectedRunMode);
+      console.log('[RunSession] New session created (IDLE):', {
+        scenarioId: activeRunSession.scenarioId,
+        sessionId: activeRunSession.sessionId,
+        mode: activeRunSession.mode,
+        robots: activeRunSession.initialSnapshots.map((s) => s.robotId)
+      });
+
+      // Re-enable SAVE CHANGES (run is IDLE after a fresh load)
+      if (scenarioManagerRef) scenarioManagerRef.setRunActive(false);
+      updateRunStatusDisplay(activeRunSession.mode, 'IDLE');
+
+      // 1. Stop any currently moving robots
+      Object.keys(activeTweens).forEach((id) => {
+        if (activeTweens[id] && typeof activeTweens[id].stop === 'function') {
+          try {
+            activeTweens[id].stop();
+          } catch (err) {
+            console.warn(`Error stopping tween for ${id}:`, err);
+          }
+        }
+        activeTweens[id] = null;
+      });
+
+      // 2. Restore the fleet from the PERSISTED snapshot (not runtime state)
+      // restoreFleet uses scenario.robots which is the saved/canonical initial config
+      const restoredIds = restoreFleet(this, containers, scenario.robots);
+
+      // 3. Re-register drag handling for each restored robot sprite
+      restoredIds.forEach((id) => {
+        registerRobotDrag(id);
+      });
+
+      // 4. Recreate destination markers & recalculate navigation paths
+      restoredIds.forEach((id) => {
+        updateDestinationMarker(id);
+        recalculateRobotPath(id);
+      });
+
+      // 5. Refresh conflict detection
+      detectFleetConflicts();
+
+      // 6. Refresh dashboard metrics/UI
+      uiController.renderRobotSelector();
+      uiController.updateFleetCounter();
+
+      // 7. Select the first robot if fleet is non-empty
+      const targetSelectId = restoredIds.length > 0 ? restoredIds[0] : null;
+      uiController.selectRobot(targetSelectId);
+
+      // 8. Update debug window references
+      window.robots = robots;
+      window.robotSprites = robotSprites;
+      window.conflicts = getConflicts();
+      window.selectedRobotId = targetSelectId;
+      window.robotState = targetSelectId ? (robots[targetSelectId] || null) : null;
+      window.activeRunSession = activeRunSession;
+
+      // ── Step 5: Refresh comparison panel for the newly loaded scenario ──
+      comparisonPanel.update();
+
+      // ── Update visible scenario selector in Simulation Control card ──
+      if (dashboardControlsRef) {
+        dashboardControlsRef.updateActiveScenario(scenario.name);
+      }
+    };
 
     // ── Scenario Manager ──────────────────────────────────────────────────────
     const scenarioManager = createScenarioManager({
@@ -501,83 +587,7 @@ class WarehouseScene extends Phaser.Scene {
         const updated = await scenarioService.updateScenario(id, name, robots);
         return updated;
       },
-      onLoadScenario: (scenario) => {
-        if (!scenario || !Array.isArray(scenario.robots)) return;
-
-        // ── Create a FRESH runtime session from the persisted scenario ─────────
-        // Deep copies robot snapshots so the saved scenario is never mutated by
-        // runtime movement. Loading the same scenario again always resets to
-        // the original saved positions.
-        // Reset run mode to BASELINE on every fresh scenario load
-        selectedRunMode = RUN_MODES.BASELINE;
-        syncModeSelectorUI();
-        setModeSelectorDisabled(false);
-        setStartAllDisabled(false);
-
-        // ── Create fresh session — mode defaults to BASELINE on load ──────────
-        // The existing deepCopySnapshot / initialSnapshots isolation is fully
-        // preserved inside createRunSession; mode is additive metadata only.
-        activeRunSession = createRunSession(scenario.id, scenario.robots, selectedRunMode);
-        console.log('[RunSession] New session created (IDLE):', {
-          scenarioId: activeRunSession.scenarioId,
-          sessionId: activeRunSession.sessionId,
-          mode: activeRunSession.mode,
-          robots: activeRunSession.initialSnapshots.map((s) => s.robotId)
-        });
-
-        // Re-enable SAVE CHANGES (run is IDLE after a fresh load)
-        if (scenarioManagerRef) scenarioManagerRef.setRunActive(false);
-        updateRunStatusDisplay(activeRunSession.mode, 'IDLE');
-
-        // 1. Stop any currently moving robots
-        Object.keys(activeTweens).forEach((id) => {
-          if (activeTweens[id] && typeof activeTweens[id].stop === 'function') {
-            try {
-              activeTweens[id].stop();
-            } catch (err) {
-              console.warn(`Error stopping tween for ${id}:`, err);
-            }
-          }
-          activeTweens[id] = null;
-        });
-
-        // 2. Restore the fleet from the PERSISTED snapshot (not runtime state)
-        // restoreFleet uses scenario.robots which is the saved/canonical initial config
-        const restoredIds = restoreFleet(this, containers, scenario.robots);
-
-        // 3. Re-register drag handling for each restored robot sprite
-        restoredIds.forEach((id) => {
-          registerRobotDrag(id);
-        });
-
-        // 4. Recreate destination markers & recalculate navigation paths
-        restoredIds.forEach((id) => {
-          updateDestinationMarker(id);
-          recalculateRobotPath(id);
-        });
-
-        // 5. Refresh conflict detection
-        detectFleetConflicts();
-
-        // 6. Refresh dashboard metrics/UI
-        uiController.renderRobotSelector();
-        uiController.updateFleetCounter();
-
-        // 7. Select the first robot if fleet is non-empty
-        const targetSelectId = restoredIds.length > 0 ? restoredIds[0] : null;
-        uiController.selectRobot(targetSelectId);
-
-        // 8. Update debug window references
-        window.robots = robots;
-        window.robotSprites = robotSprites;
-        window.conflicts = getConflicts();
-        window.selectedRobotId = targetSelectId;
-        window.robotState = targetSelectId ? (robots[targetSelectId] || null) : null;
-        window.activeRunSession = activeRunSession;
-
-        // ── Step 5: Refresh comparison panel for the newly loaded scenario ──
-        comparisonPanel.update();
-      },
+      onLoadScenario: executeLoadScenario,
       onDeleteScenario: async (id) => {
         return await scenarioService.deleteScenario(id);
       }
@@ -585,6 +595,31 @@ class WarehouseScene extends Phaser.Scene {
 
     // Populate forward reference so movement callbacks can reach scenarioManager
     scenarioManagerRef = scenarioManager;
+
+    // ── Setup visible ARES dashboard controls (navigation tabs, dropdowns, info) ──
+    const dashboardControls = setupDashboardControls({
+      getScenarios: () => scenarioService.getScenarios(),
+      onLoadScenario: (scenario) => {
+        if (scenarioManagerRef) {
+          scenarioManagerRef.setActiveScenario(scenario.id, scenario.name);
+        }
+        executeLoadScenario(scenario);
+      },
+      getRobots: () => robots,
+      onSelectRobot: (robotId) => {
+        uiController.selectRobot(robotId);
+      },
+      onAddRobot: () => {
+        const addBtn = document.getElementById('btn-add-robot');
+        if (addBtn && !addBtn.disabled) {
+          addBtn.click();
+        }
+      },
+      getSelectedRobotId: () => uiController.getSelectedRobotId(),
+      maxRobots: MAX_ROBOTS
+    });
+
+    dashboardControlsRef = dashboardControls;
 
     // ── Initial pass ──────────────────────────────────────────────────────────
     detectFleetConflicts();

@@ -93,6 +93,7 @@ export function createUIController(robots, robotSprites, callbacks) {
 
       const startBtn = document.getElementById('start-btn');
       if (startBtn) {
+        startBtn.disabled = true;
         startBtn.style.opacity = '0.5';
         startBtn.style.cursor  = 'not-allowed';
       }
@@ -179,9 +180,11 @@ export function createUIController(robots, robotSprites, callbacks) {
       const startBtn = document.getElementById('start-btn');
       if (startBtn) {
         if (activeRobot.status === 'moving') {
+          startBtn.disabled = true;
           startBtn.style.opacity = '0.5';
           startBtn.style.cursor  = 'not-allowed';
         } else {
+          startBtn.disabled = false;
           startBtn.style.opacity = '1';
           startBtn.style.cursor  = 'pointer';
         }
