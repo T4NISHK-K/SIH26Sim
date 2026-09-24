@@ -1,5 +1,5 @@
 import { createMovementController } from '../src/robots/robotMovement.js';
-import { buildRobotFeatures, predictRobot } from '../src/network/edgeClient.js';
+import { buildRobotFeatures, predictRobot, connectEdge } from '../src/network/edgeClient.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -332,14 +332,18 @@ console.log('\n--- TEST 7: Predictor Failure Safe Fallback ---');
 // TEST 6: V2 OPTIMIZED Full Runtime Chain
 // ----------------------------------------------------
 console.log('\n--- TEST 6: V2 OPTIMIZED Full Runtime Chain (End-to-End HTTP + Movement) ---');
-const serverProc = spawn('node', ['server/index.js'], { cwd: rootDir, stdio: 'inherit' });
+let serverProc = null;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function runEndToEndChain() {
-  await sleep(1500);
+  const isUp = await connectEdge('http://127.0.0.1:3001');
+  if (!isUp) {
+    serverProc = spawn('node', ['server/index.js'], { cwd: rootDir, stdio: 'inherit' });
+    await sleep(1500);
+  }
 
   try {
     const testRobot = {
@@ -391,7 +395,7 @@ async function runEndToEndChain() {
     console.error('End-to-End Chain Exception:', err);
     failures++;
   } finally {
-    serverProc.kill();
+    if (serverProc) serverProc.kill();
     console.log('\n====================================================');
     console.log(`STAGE 3C TESTS COMPLETED with ${failures} failure(s)`);
     console.log('====================================================');

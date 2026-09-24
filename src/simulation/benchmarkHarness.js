@@ -17,6 +17,7 @@
  *   - Machine-readable JSON output and clean text comparison tables.
  */
 
+import crypto from 'node:crypto';
 import { createPathfinder } from '../navigation/astar.js';
 import { createConflictDetector } from '../coordination/conflictDetection.js';
 import { createMovementController } from '../robots/robotMovement.js';
@@ -42,6 +43,29 @@ export const WAIT_SAFETY_TIMEOUT_MS = 3000;
  */
 export function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
+}
+
+/**
+ * Compute a deterministic SHA-256 hash of the canonical initial scenario state.
+ * Guarantees identical hash for paired runs starting from identical conditions.
+ *
+ * @param {object} scenario
+ * @returns {string}
+ */
+export function computeScenarioHash(scenario) {
+  const canonical = {
+    name: scenario.name,
+    robots: (scenario.robots || []).map((r) => ({
+      robotId: r.robotId,
+      start: { tileX: r.start.tileX, tileY: r.start.tileY },
+      destination: { tileX: r.destination.tileX, tileY: r.destination.tileY },
+      speed: r.speed,
+      priority: r.priority,
+      battery: r.battery,
+      task: r.task
+    }))
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
 
 /**
@@ -541,8 +565,12 @@ export async function runPairedBenchmark(scenario, options = {}) {
     reroute_count: calculatePercentageDifference(baselineResults.reroute_count, aresResults.reroute_count)
   };
 
+  const initialStateHash = computeScenarioHash(scenario);
+
   return {
+    scenario: scenario.name,
     scenarioName: scenario.name,
+    initial_state_hash: initialStateHash,
     timestamp: new Date().toISOString(),
     baseline: baselineResults,
     ares: aresResults,
@@ -588,11 +616,67 @@ export function formatComparisonTable(benchmarkResult) {
   });
 
   return [
-    `SCENARIO: ${benchmarkResult.scenarioName}`,
+    `SCENARIO: ${benchmarkResult.scenario || benchmarkResult.scenarioName}`,
+    `INITIAL STATE HASH: ${benchmarkResult.initial_state_hash || 'N/A'}`,
     divider,
     header,
     divider,
     ...formattedRows,
     divider
   ].join('\n');
+}
+
+/**
+ * Format all scenario results into a single concise multi-scenario table:
+ * Scenario | Metric | BASELINE | ARES | Difference
+ *
+ * @param {Array<object>} benchmarkResults
+ * @returns {string}
+ */
+export function formatSummaryTable(benchmarkResults) {
+  const colWidths = [28, 24, 12, 12, 14];
+  const header = [
+    'Scenario'.padEnd(colWidths[0]),
+    'Metric'.padEnd(colWidths[1]),
+    'BASELINE'.padEnd(colWidths[2]),
+    'ARES'.padEnd(colWidths[3]),
+    'Difference'.padEnd(colWidths[4])
+  ].join(' ');
+  const divider = '-'.repeat(colWidths.reduce((a, b) => a + b, 0) + 4);
+
+  const lines = [divider, header, divider];
+
+  for (const res of benchmarkResults) {
+    const scName = res.scenario || res.scenarioName;
+    const b = res.baseline;
+    const a = res.ares;
+    const d = res.differencesPct;
+
+    const metricRows = [
+      ['Collision events', String(b.collision_events), String(a.collision_events), formatPercentageDifference(d.collision_events)],
+      ['Near-collision events', String(b.near_collision_events), String(a.near_collision_events), formatPercentageDifference(d.near_collision_events)],
+      ['Min separation (m)', b.minimum_separation_m.toFixed(3), a.minimum_separation_m.toFixed(3), formatPercentageDifference(d.minimum_separation_m)],
+      ['Deadlocks', String(b.deadlocks), String(a.deadlocks), formatPercentageDifference(d.deadlocks)],
+      ['Average wait (s)', b.average_wait_time_sec.toFixed(3), a.average_wait_time_sec.toFixed(3), formatPercentageDifference(d.average_wait_time_sec)],
+      ['Total distance (m)', b.total_distance_m.toFixed(3), a.total_distance_m.toFixed(3), formatPercentageDifference(d.total_distance_m)],
+      ['Energy proxy', b.energy_proxy.toFixed(3), a.energy_proxy.toFixed(3), formatPercentageDifference(d.energy_proxy)],
+      ['Missions completed', `${b.missions_completed}/${scName.includes('5') ? 5 : (scName.includes('3') ? 3 : 4)}`, `${a.missions_completed}/${scName.includes('5') ? 5 : (scName.includes('3') ? 3 : 4)}`, formatPercentageDifference(d.missions_completed)],
+      ['Completion time (s)', b.task_completion_time_sec.toFixed(3), a.task_completion_time_sec.toFixed(3), formatPercentageDifference(d.task_completion_time_sec)],
+      ['Reroutes', String(b.reroute_count), String(a.reroute_count), formatPercentageDifference(d.reroute_count)]
+    ];
+
+    metricRows.forEach((row, idx) => {
+      const scenarioCol = idx === 0 ? scName : '';
+      lines.push([
+        scenarioCol.padEnd(colWidths[0]),
+        row[0].padEnd(colWidths[1]),
+        row[1].padEnd(colWidths[2]),
+        row[2].padEnd(colWidths[3]),
+        row[3].padEnd(colWidths[4])
+      ].join(' '));
+    });
+    lines.push(divider);
+  }
+
+  return lines.join('\n');
 }
