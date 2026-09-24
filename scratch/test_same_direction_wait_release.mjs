@@ -268,7 +268,7 @@ console.log('\n--- Case E: Completed robot does not generate new future conflict
   ]);
 
   assert(features.obstacle_detected === 0, 'Case E.1: obstacle_detected is 0 because other robot is completed');
-  assert(features.collision_risk <= 0.05, 'Case E.2: collision_risk is minimal for completed peer');
+  assert(features.nearest_robot_distance_m === 99.0, 'Case E.2: nearest_robot_distance_m is fallback 99.0 for completed peer');
 }
 
 // ── Case F: Existing HEAD-ON REROUTE behavior remains intact ───────────────────

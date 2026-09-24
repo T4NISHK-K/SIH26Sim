@@ -17,7 +17,7 @@
  */
 
 import { assessTemporalResolution } from '../coordination/conflictDetection.js';
-import { selectAdaptiveIntervention } from '../coordination/adaptiveIntervention.js';
+import { selectAdaptiveIntervention, arbitrateConflictRoles, getRobotPriorityRank } from '../coordination/adaptiveIntervention.js';
 
 const DECISION_MAX_AGE_MS = 3000;
 const REROUTE_COOLDOWN_MS = 1500;
@@ -28,9 +28,11 @@ if (typeof window !== 'undefined') {
   window.robotMovementDecisionState = window.robotMovementDecisionState || {};
 }
 
+const VALID_DECISIONS = ['MOVE', 'SLOW', 'WAIT', 'REROUTE'];
+
 /**
  * Retrieve the latest valid decision for a robot.
- * In BASELINE mode or when decision is stale (>3000ms) or missing, returns MOVE.
+ * In BASELINE mode or when decision is stale (>3000ms), invalid, or missing, returns MOVE.
  *
  * @param {string} robotId
  * @param {string} runMode
@@ -49,6 +51,11 @@ function getEffectiveDecision(robotId, runMode) {
     return { decision: 'MOVE', isFresh: false, raw: null };
   }
 
+  // Validate that decision is one of the 4 valid ARES V2 classes
+  if (!VALID_DECISIONS.includes(record.decision)) {
+    return { decision: 'MOVE', isFresh: false, raw: record };
+  }
+
   const now = Date.now();
   const age = now - (record.timestamp || 0);
 
@@ -56,9 +63,9 @@ function getEffectiveDecision(robotId, runMode) {
     return { decision: 'MOVE', isFresh: false, raw: record };
   }
 
-  // Optimized movement applies ML decisions only when confidence >= 0.60
-  const confidence = typeof record.confidence === 'number' ? record.confidence : 0;
-  if (confidence < 0.60) {
+  // Optimized movement applies ML decisions when confidence >= 0.50 (or when confidence is omitted/valid)
+  const confidence = typeof record.confidence === 'number' ? record.confidence : 1.0;
+  if (confidence < 0.50) {
     return { decision: 'MOVE', isFresh: true, raw: record };
   }
 
@@ -163,7 +170,12 @@ export function createMovementController(scene, map, robots, robotSprites, activ
       const finalTileX = r.destination.tileX;
       const finalTileY = r.destination.tileY;
 
-      sprite.setPosition(finalX, finalY);
+      if (typeof sprite.setPosition === 'function') {
+        sprite.setPosition(finalX, finalY);
+      } else {
+        sprite.x = finalX;
+        sprite.y = finalY;
+      }
       r.x = finalX;
       r.y = finalY;
       r.start.x = finalX;
@@ -211,6 +223,24 @@ export function createMovementController(scene, map, robots, robotSprites, activ
         const tx = c.tileX !== undefined ? c.tileX : c.navX;
         const ty = c.tileY !== undefined ? c.tileY : c.navY;
         if (upcoming.some((wp) => Math.abs(wp.tileX - tx) < 0.6 && Math.abs(wp.tileY - ty) < 0.6)) {
+          if (otherRobot) {
+            // Check if other robot has already cleared this conflict tile
+            const otherWpIdx = otherRobot.waypointIndex || 0;
+            const otherUpcoming = (otherRobot.path && otherWpIdx < otherRobot.path.length)
+              ? otherRobot.path.slice(otherWpIdx)
+              : [];
+            const otherHasUpcoming = otherUpcoming.some((wp) => Math.abs(wp.tileX - tx) < 0.6 && Math.abs(wp.tileY - ty) < 0.6);
+            if (!otherHasUpcoming) {
+              const otherSprite = robotSprites[otherId];
+              const ox = otherSprite ? otherSprite.x : (otherRobot.x ?? 0);
+              const oy = otherSprite ? otherSprite.y : (otherRobot.y ?? 0);
+              const targetWx = (map && typeof map.tileToWorldX === 'function') ? (map.tileToWorldX(tx) + 16) : (tx * 32 + 16);
+              const targetWy = (map && typeof map.tileToWorldY === 'function') ? (map.tileToWorldY(ty) + 16) : (ty * 32 + 16);
+              if (Math.hypot(ox - targetWx, oy - targetWy) > 48.0) {
+                continue; // Conflict zone cleared by other robot
+              }
+            }
+          }
           conflictTiles.push({ tileX: tx, tileY: ty, navX: c.navX, navY: c.navY });
         }
       } else if (c.type === 'edge') {
@@ -252,6 +282,24 @@ export function createMovementController(scene, map, robots, robotSprites, activ
         const ty = c.tileY !== undefined ? c.tileY : c.navY;
         if (tx !== undefined && ty !== undefined) {
           if (upcoming.some((wp) => Math.abs(wp.tileX - tx) < 0.6 && Math.abs(wp.tileY - ty) < 0.6)) {
+            if (otherRobot) {
+              // Check if other robot has already cleared this conflict tile
+              const otherWpIdx = otherRobot.waypointIndex || 0;
+              const otherUpcoming = (otherRobot.path && otherWpIdx < otherRobot.path.length)
+                ? otherRobot.path.slice(otherWpIdx)
+                : [];
+              const otherHasUpcoming = otherUpcoming.some((wp) => Math.abs(wp.tileX - tx) < 0.6 && Math.abs(wp.tileY - ty) < 0.6);
+              if (!otherHasUpcoming) {
+                const otherSprite = robotSprites[otherId];
+                const ox = otherSprite ? otherSprite.x : (otherRobot.x ?? 0);
+                const oy = otherSprite ? otherSprite.y : (otherRobot.y ?? 0);
+                const targetWx = (map && typeof map.tileToWorldX === 'function') ? (map.tileToWorldX(tx) + 16) : (tx * 32 + 16);
+                const targetWy = (map && typeof map.tileToWorldY === 'function') ? (map.tileToWorldY(ty) + 16) : (ty * 32 + 16);
+                if (Math.hypot(ox - targetWx, oy - targetWy) > 48.0) {
+                  continue; // Conflict zone cleared!
+                }
+              }
+            }
             const time = (c.robotA === robotId ? c.timeA : c.timeB) ?? 0;
             relevant.push({ conflict: c, time });
           }
@@ -352,7 +400,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
     const scored = candidates.map((p) => {
       let risk = 0;
       for (const [otherId, other] of Object.entries(robots)) {
-        if (otherId === robotId || !other || !other.path) continue;
+        if (otherId === robotId || !other || !other.path || other.status === 'completed') continue;
         const otherUpcoming = other.path.slice(1);
         for (const wp of p) {
           if (otherUpcoming.some((owp) => Math.abs(owp.tileX - wp.tileX) < 0.6 && Math.abs(owp.tileY - wp.tileY) < 0.6)) {
@@ -377,6 +425,49 @@ export function createMovementController(scene, map, robots, robotSprites, activ
     return scored[0]?.path || null;
   };
 
+  // ── Physical Spatial Separation Constants ─────────────────────────────────
+  // Robot sprite display size is 64x64 px (2.0m x 2.0m).
+  // Two robots visually touch when center-to-center distance <= 64px (2.0m).
+  const ROBOT_SPRITE_DIAMETER_PX = 64.0;
+  const PHYSICAL_STOP_THRESHOLD_PX = 64.0;  // 2.0m: Touch boundary, must hold
+  const PHYSICAL_CLEAR_THRESHOLD_PX = 68.0; // 2.125m: Safe clearance to resume
+  const PHYSICAL_SLOW_THRESHOLD_PX = 96.0;  // 3.0m: Proactive speed moderation
+
+  /**
+   * Check whether continuing toward (targetX, targetY) would cause this robot
+   * to penetrate another robot's 64px physical sprite footprint.
+   */
+  const checkImmediateObstacleAhead = (robotId, curX, curY, targetX, targetY, thresholdPx = PHYSICAL_STOP_THRESHOLD_PX) => {
+    const dx = targetX - curX;
+    const dy = targetY - curY;
+    const distToTarget = Math.hypot(dx, dy);
+    if (distToTarget < 1e-4) return null;
+
+    const ux = dx / distToTarget;
+    const uy = dy / distToTarget;
+
+    for (const [otherId, other] of Object.entries(robots)) {
+      if (!other || otherId === robotId || other.status === 'completed') continue;
+      const otherSprite = robotSprites[otherId];
+      const ox = otherSprite ? otherSprite.x : (other.x !== undefined ? other.x : other.start?.x);
+      const oy = otherSprite ? otherSprite.y : (other.y !== undefined ? other.y : other.start?.y);
+      if (ox === undefined || oy === undefined) continue;
+
+      const rx = ox - curX;
+      const ry = oy - curY;
+      const dist = Math.hypot(rx, ry);
+
+      // Forward projection along heading
+      const forwardProj = rx * ux + ry * uy;
+
+      // Obstacle is in front and within physical boundary
+      if (forwardProj > 0 && dist <= thresholdPx) {
+        return { otherId, dist, forwardProj };
+      }
+    }
+    return null;
+  };
+
   // ── Handle WAIT State ────────────────────────────────────────────────────────
   const enterWaitState = (robotId, waypointIndex, runMode) => {
     const r = robots[robotId];
@@ -387,6 +478,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
     coord.applied = true;
     coord.waiting = true;
     coord.effectiveSpeed = 0;
+    r.effectiveSpeed = 0;
     coord.lastAppliedAt = Date.now();
     coord.consecutiveWaitCount = (coord.consecutiveWaitCount || 0) + 1;
     if (!coord.waitStartedAt) {
@@ -416,121 +508,160 @@ export function createMovementController(scene, map, robots, robotSprites, activ
       const currentCheck = getEffectiveDecision(robotId, runMode);
 
       const relevantConflict = getMostImminentUpcomingConflict(robotId, waypointIndex);
-      const conflictCleared = !relevantConflict;
+      let conflictCleared = !relevantConflict;
 
-        // 1. Detect mutual WAIT / lack of progress
-        let otherRobotId = null;
-        let isMutualWait = false;
-        let assessment = null;
-        if (relevantConflict) {
-          otherRobotId = relevantConflict.robotA === robotId ? relevantConflict.robotB : relevantConflict.robotA;
-          const otherCoord = getCoordinationState(otherRobotId);
+      let otherRobotId = null;
+      let otherRobot = null;
+      let otherCoord = null;
+      let isMutualWait = false;
+      let assessment = null;
+
+      if (relevantConflict) {
+        otherRobotId = relevantConflict.robotA === robotId ? relevantConflict.robotB : relevantConflict.robotA;
+        otherRobot = robots[otherRobotId];
+        if (!otherRobot || otherRobot.status === 'completed' || otherRobot.status === 'idle') {
+          conflictCleared = true;
+        } else {
+          otherCoord = getCoordinationState(otherRobotId);
           isMutualWait = Boolean(otherCoord && otherCoord.waiting);
           assessment = relevantConflict.temporalAssessment ||
             (typeof assessTemporalResolution === 'function' ? assessTemporalResolution(relevantConflict, robots[relevantConflict.robotA], robots[relevantConflict.robotB]) : null);
         }
+      }
 
-        if (isMutualWait) {
-          const timingPossible = Boolean(assessment && assessment.timingResolutionPossible);
+      // Re-evaluate current adaptive intervention against live runtime state
+      let reEvaluatedDecision = 'MOVE';
+      if (runMode === 'OPTIMIZED' && !conflictCleared && relevantConflict) {
+        const reEval = selectAdaptiveIntervention({
+          mlDecision: currentCheck.decision,
+          conflict: relevantConflict,
+          temporalAssessment: assessment,
+          robotState: r,
+          otherRobotState: otherRobot,
+          isOtherWaiting: isMutualWait,
+          consecutiveWaitCount: coord.consecutiveWaitCount || 0
+        });
+        reEvaluatedDecision = reEval.appliedDecision;
+      }
 
-          if (!timingPossible) {
-            // Spatial conflict cannot be resolved temporally; prefer REROUTE when valid alternate path exists
-            const curTileX = (map && typeof map.worldToTileX === 'function')
-              ? map.worldToTileX(sprite.x)
-              : Math.floor(sprite.x / 32);
-            const curTileY = (map && typeof map.worldToTileY === 'function')
-              ? map.worldToTileY(sprite.y)
-              : Math.floor(sprite.y / 32);
-            const upcomingConflictTiles = getUpcomingConflictTiles(robotId, waypointIndex);
-            const alternatePath = r.destination
-              ? tryCalculateAlternatePath(robotId, curTileX, curTileY, r.destination.tileX, r.destination.tileY, upcomingConflictTiles)
-              : null;
+      // Mutual wait / Deadlock breaking
+      if (isMutualWait && relevantConflict) {
+        const timingPossible = Boolean(assessment && assessment.timingResolutionPossible);
 
-            if (alternatePath && alternatePath.length > 1) {
-              if (coord.waitTimerEvent) {
-                coord.waitTimerEvent.remove();
-                coord.waitTimerEvent = null;
-              }
-              const waitedDurationSec = parseFloat((waitElapsedMs / 1000).toFixed(3));
-              if (typeof callbacks.onWaitTime === 'function' && waitedDurationSec > 0) {
-                callbacks.onWaitTime(robotId, waitedDurationSec);
-              }
-              r.path = alternatePath;
-              coord.rerouteCount++;
-              coord.lastRerouteAt = Date.now();
-              coord.decision = 'REROUTE';
-              coord.finalDecision = 'REROUTE';
-              coord.decisionReason = 'Mutual wait in unresolvable conflict; spatial rerouting applied';
-              coord.waiting = false;
-              coord.waitStartedAt = null;
-              coord.consecutiveWaitCount = 0;
-              coord.applied = true;
-              syncDebugState(robotId);
-              if (typeof callbacks.updatePathVisualization === 'function') {
-                callbacks.updatePathVisualization(robotId);
-              }
-              callbacks.detectFleetConflicts();
-              moveRobotToNextWaypoint(robotId, 1);
-              return;
+        if (!timingPossible) {
+          // Spatial conflict cannot be resolved temporally; prefer REROUTE when valid alternate path exists
+          const curTileX = (map && typeof map.worldToTileX === 'function')
+            ? map.worldToTileX(sprite.x)
+            : Math.floor(sprite.x / 32);
+          const curTileY = (map && typeof map.worldToTileY === 'function')
+            ? map.worldToTileY(sprite.y)
+            : Math.floor(sprite.y / 32);
+          const upcomingConflictTiles = getUpcomingConflictTiles(robotId, waypointIndex);
+          const alternatePath = r.destination
+            ? tryCalculateAlternatePath(robotId, curTileX, curTileY, r.destination.tileX, r.destination.tileY, upcomingConflictTiles)
+            : null;
+
+          if (alternatePath && alternatePath.length > 1) {
+            if (coord.waitTimerEvent) {
+              coord.waitTimerEvent.remove();
+              coord.waitTimerEvent = null;
             }
-          } else {
-            // Timing CAN resolve conflict: release lead robot to clear intersection
-            const timeMe = relevantConflict.robotA === robotId ? relevantConflict.timeA : relevantConflict.timeB;
-            const timeOther = relevantConflict.robotA === robotId ? relevantConflict.timeB : relevantConflict.timeA;
-            const shouldRelease = (timeMe !== null && timeOther !== null && timeMe < timeOther) ||
-                                  (timeMe === timeOther && robotId < otherRobotId) ||
-                                  (timeMe === null && robotId < otherRobotId);
-
-            if (shouldRelease) {
-              if (coord.waitTimerEvent) {
-                coord.waitTimerEvent.remove();
-                coord.waitTimerEvent = null;
-              }
-              const waitedDurationSec = parseFloat((waitElapsedMs / 1000).toFixed(3));
-              if (typeof callbacks.onWaitTime === 'function' && waitedDurationSec > 0) {
-                callbacks.onWaitTime(robotId, waitedDurationSec);
-              }
-              coord.waiting = false;
-              coord.waitStartedAt = null;
-              coord.consecutiveWaitCount = 0;
-              coord.effectiveSpeed = r.speed || 100;
-              coord.decision = 'MOVE';
-              coord.finalDecision = 'MOVE';
-              coord.decisionReason = 'Mutual wait broken; lead robot released to clear intersection';
-              coord.applied = true;
-              syncDebugState(robotId);
-              moveRobotToNextWaypoint(robotId, waypointIndex);
-              return;
+            const waitedDurationSec = parseFloat((waitElapsedMs / 1000).toFixed(3));
+            if (typeof callbacks.onWaitTime === 'function' && waitedDurationSec > 0) {
+              callbacks.onWaitTime(robotId, waitedDurationSec);
             }
+            r.path = alternatePath;
+            coord.rerouteCount++;
+            coord.lastRerouteAt = Date.now();
+            coord.decision = 'REROUTE';
+            coord.finalDecision = 'REROUTE';
+            coord.decisionReason = 'Mutual wait in unresolvable conflict; spatial rerouting applied';
+            coord.waiting = false;
+            coord.waitStartedAt = null;
+            coord.consecutiveWaitCount = 0;
+            coord.applied = true;
+            syncDebugState(robotId);
+            if (typeof callbacks.updatePathVisualization === 'function') {
+              callbacks.updatePathVisualization(robotId);
+            }
+            callbacks.detectFleetConflicts();
+            moveRobotToNextWaypoint(robotId, 1);
+            return;
+          }
+        } else {
+          // Priority-aware tie-breaking: designated progressing robot releases
+          const { isSelfProgressing } = arbitrateConflictRoles(r, otherRobot, relevantConflict);
+          if (isSelfProgressing) {
+            reEvaluatedDecision = 'MOVE';
           }
         }
+      }
 
-        const shouldResume =
-          waitElapsedMs >= WAIT_SAFETY_TIMEOUT_MS ||
-          (currentCheck.isFresh && (currentCheck.decision === 'MOVE' || currentCheck.decision === 'SLOW')) ||
-          conflictCleared;
-
-        if (shouldResume) {
-          if (coord.waitTimerEvent) {
-            coord.waitTimerEvent.remove();
-            coord.waitTimerEvent = null;
-          }
-          coord.checkWaitResume = null;
-
-          const waitedDurationSec = parseFloat((waitElapsedMs / 1000).toFixed(3));
-          if (typeof callbacks.onWaitTime === 'function' && waitedDurationSec > 0) {
-            callbacks.onWaitTime(robotId, waitedDurationSec);
-          }
-
-          coord.waiting = false;
-          coord.waitStartedAt = null;
-          coord.consecutiveWaitCount = 0;
-          coord.effectiveSpeed = r.speed || 100;
-          syncDebugState(robotId);
-
-          moveRobotToNextWaypoint(robotId, waypointIndex);
+      // Check physical clearance directly ahead (skip completed robots)
+      let obstacleAhead = null;
+      if (runMode === 'OPTIMIZED') {
+        const targetTile = r.path && waypointIndex < r.path.length ? r.path[waypointIndex] : null;
+        if (targetTile) {
+          const targetWorldX = targetTile.worldX !== undefined ? targetTile.worldX : (map.tileToWorldX(targetTile.tileX) + 16);
+          const targetWorldY = targetTile.worldY !== undefined ? targetTile.worldY : (map.tileToWorldY(targetTile.tileY) + 16);
+          obstacleAhead = checkImmediateObstacleAhead(
+            robotId,
+            sprite.x,
+            sprite.y,
+            targetWorldX,
+            targetWorldY,
+            PHYSICAL_CLEAR_THRESHOLD_PX
+          );
         }
-      };
+      }
+
+      // If space directly ahead is physically blocked by an active robot within 68px, continue holding safely
+      if (obstacleAhead) {
+        return;
+      }
+
+      // Explicit WAIT release conditions:
+      // 1. Conflict zone cleared
+      // 2. Adaptive re-evaluation permits MOVE or SLOW
+      // 3. Fresh external MOVE/SLOW decision
+      // 4. Repeated wait cap or safety timeout expired
+      const shouldResume =
+        conflictCleared ||
+        reEvaluatedDecision === 'MOVE' ||
+        reEvaluatedDecision === 'SLOW' ||
+        (currentCheck.isFresh && (currentCheck.decision === 'MOVE' || currentCheck.decision === 'SLOW')) ||
+        coord.consecutiveWaitCount >= 2 ||
+        waitElapsedMs >= WAIT_SAFETY_TIMEOUT_MS;
+
+      if (shouldResume) {
+        if (coord.waitTimerEvent) {
+          coord.waitTimerEvent.remove();
+          coord.waitTimerEvent = null;
+        }
+        coord.checkWaitResume = null;
+
+        const waitedDurationSec = parseFloat((waitElapsedMs / 1000).toFixed(3));
+        if (typeof callbacks.onWaitTime === 'function' && waitedDurationSec > 0) {
+          callbacks.onWaitTime(robotId, waitedDurationSec);
+        }
+
+        const nextSpeed = (reEvaluatedDecision === 'SLOW') ? Math.max(10, (r.speed || 100) * 0.5) : (r.speed || 100);
+        coord.waiting = false;
+        coord.waitStartedAt = null;
+        coord.consecutiveWaitCount = 0;
+        coord.effectiveSpeed = nextSpeed;
+        r.effectiveSpeed = nextSpeed;
+        coord.decision = (reEvaluatedDecision === 'SLOW') ? 'SLOW' : 'MOVE';
+        coord.finalDecision = coord.decision;
+        coord.decisionReason = conflictCleared
+          ? 'Conflict zone cleared; resumed movement'
+          : 'Coordination re-evaluation: progressing robot released to prevent deadlock';
+        coord.applied = true;
+        syncDebugState(robotId);
+
+        moveRobotToNextWaypoint(robotId, waypointIndex);
+      }
+    };
 
     coord.checkWaitResume = checkWaitResume;
     coord.waitTimerEvent = scene.time.addEvent({
@@ -551,6 +682,8 @@ export function createMovementController(scene, map, robots, robotSprites, activ
       return;
     }
 
+    r.waypointIndex = waypointIndex;
+
     const runMode = typeof callbacks.getRunMode === 'function' ? callbacks.getRunMode() : 'BASELINE';
     const { decision: rawDecision, isFresh, raw } = getEffectiveDecision(robotId, runMode);
     const coord = getCoordinationState(robotId);
@@ -568,6 +701,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
       const otherRobotId = relevantConflict
         ? (relevantConflict.robotA === robotId ? relevantConflict.robotB : relevantConflict.robotA)
         : null;
+      const otherRobot = otherRobotId ? robots[otherRobotId] : null;
       const otherCoord = otherRobotId ? getCoordinationState(otherRobotId) : null;
       const isOtherWaiting = Boolean(otherCoord && otherCoord.waiting);
 
@@ -576,6 +710,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
         conflict: relevantConflict,
         temporalAssessment: assessment,
         robotState: r,
+        otherRobotState: otherRobot,
         isOtherWaiting,
         consecutiveWaitCount: coord.consecutiveWaitCount || 0
       });
@@ -671,6 +806,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
     coord.waiting = false;
     coord.consecutiveWaitCount = 0;
     coord.effectiveSpeed = effectiveSpeed;
+    r.effectiveSpeed = effectiveSpeed;
     coord.waitStartedAt = null;
     coord.lastAppliedAt = Date.now();
     syncDebugState(robotId);
@@ -678,6 +814,41 @@ export function createMovementController(scene, map, robots, robotSprites, activ
     const targetTile = r.path[waypointIndex];
     const targetWorldX = targetTile.worldX !== undefined ? targetTile.worldX : (map.tileToWorldX(targetTile.tileX) + 16);
     const targetWorldY = targetTile.worldY !== undefined ? targetTile.worldY : (map.tileToWorldY(targetTile.tileY) + 16);
+
+    // Continuous physical separation safety check (OPTIMIZED mode only)
+    if (runMode === 'OPTIMIZED') {
+      const obstacleAhead = checkImmediateObstacleAhead(
+        robotId,
+        sprite.x,
+        sprite.y,
+        targetWorldX,
+        targetWorldY,
+        PHYSICAL_STOP_THRESHOLD_PX
+      );
+
+      if (obstacleAhead) {
+        // Space directly ahead is occupied within 64px physical sprite footprint; hold safely
+        enterWaitState(robotId, waypointIndex, runMode);
+        return;
+      }
+
+      if (activeDecision === 'MOVE') {
+        const nearbyAhead = checkImmediateObstacleAhead(
+          robotId,
+          sprite.x,
+          sprite.y,
+          targetWorldX,
+          targetWorldY,
+          PHYSICAL_SLOW_THRESHOLD_PX
+        );
+        if (nearbyAhead) {
+          // Smooth following velocity: reduce to 50% to prevent approaching overlap
+          effectiveSpeed = Math.max(10, baseSpeed * 0.5);
+          coord.effectiveSpeed = effectiveSpeed;
+          r.effectiveSpeed = effectiveSpeed;
+        }
+      }
+    }
 
     const distance = Math.hypot(sprite.x - targetWorldX, sprite.y - targetWorldY);
     const duration = Math.max(1, (distance / effectiveSpeed) * 1000);
@@ -691,6 +862,30 @@ export function createMovementController(scene, map, robots, robotSprites, activ
       onUpdate: () => {
         r.x = sprite.x;
         r.y = sprite.y;
+
+        if (runMode === 'OPTIMIZED') {
+          const obstacle = checkImmediateObstacleAhead(
+            robotId,
+            sprite.x,
+            sprite.y,
+            targetWorldX,
+            targetWorldY,
+            PHYSICAL_STOP_THRESHOLD_PX
+          );
+
+          if (obstacle) {
+            if (activeTweens[robotId]) {
+              activeTweens[robotId].stop();
+              activeTweens[robotId] = null;
+            }
+            r.x = sprite.x;
+            r.y = sprite.y;
+            r.start.x = sprite.x;
+            r.start.y = sprite.y;
+            r.previousValidPosition = { x: sprite.x, y: sprite.y };
+            enterWaitState(robotId, waypointIndex, runMode);
+          }
+        }
       },
       onComplete: () => {
         r.x = targetWorldX;
@@ -708,6 +903,21 @@ export function createMovementController(scene, map, robots, robotSprites, activ
         // Step 4: Report actual pixel distance travelled
         if (typeof callbacks.onSegmentTravelled === 'function' && distance > 0) {
           callbacks.onSegmentTravelled(robotId, distance);
+        }
+
+        // Recompute fleet conflicts as robots advance past waypoints
+        if (typeof callbacks.detectFleetConflicts === 'function') {
+          callbacks.detectFleetConflicts();
+        }
+
+        // Immediately check and wake up waiting robots whose conflict has cleared
+        for (const [otherId, otherCoord] of localCoordinationState.entries()) {
+          if (otherId !== robotId && otherCoord.waiting) {
+            const otherRobot = robots[otherId];
+            if (otherRobot && otherRobot.status === 'moving' && typeof otherCoord.checkWaitResume === 'function') {
+              otherCoord.checkWaitResume();
+            }
+          }
         }
 
         moveRobotToNextWaypoint(robotId, waypointIndex + 1);

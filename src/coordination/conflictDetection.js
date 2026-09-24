@@ -371,6 +371,20 @@ export function assessTemporalResolution(conflict, rAOrRobots, rB, idxA, idxB) {
     robotB = rAOrRobots[conflict.robotB];
   }
 
+  if (robotA?.status === 'completed' || robotB?.status === 'completed') {
+    return {
+      conflictType: 'UNKNOWN',
+      timeA: null,
+      timeB: null,
+      timeGap: null,
+      safeSeparationSec: SAFE_TIME_SEPARATION,
+      estimatedDelaySec: null,
+      timingResolutionPossible: false,
+      requiresReroute: false,
+      reason: 'Completed robot is not an active interaction partner'
+    };
+  }
+
   const conflictType = conflict.conflictType || classifyConflict(conflict, robotA, robotB, idxA, idxB);
 
   const timeA = typeof conflict.timeA === 'number' ? conflict.timeA : null;
@@ -638,9 +652,12 @@ export function createConflictDetector(scene, map, robots, callbacks) {
       if (r) r.timePath = null;
       return null;
     }
+    const startIndex = (typeof r.waypointIndex === 'number' && r.waypointIndex > 0 && r.waypointIndex < r.path.length)
+      ? r.waypointIndex
+      : 0;
     const timePath = [];
     let t = 0.0;
-    const first = r.path[0];
+    const first = r.path[startIndex];
     const firstWx = first.worldX !== undefined ? first.worldX : (map.tileToWorldX(first.tileX) + 16);
     const firstWy = first.worldY !== undefined ? first.worldY : (map.tileToWorldY(first.tileY) + 16);
 
@@ -654,7 +671,7 @@ export function createConflictDetector(scene, map, robots, callbacks) {
       time:   0.0
     });
 
-    for (let i = 1; i < r.path.length; i++) {
+    for (let i = startIndex + 1; i < r.path.length; i++) {
       const prev = r.path[i - 1];
       const curr = r.path[i];
       const px = prev.worldX !== undefined ? prev.worldX : (map.tileToWorldX(prev.tileX) + 16);
@@ -822,17 +839,20 @@ export function createConflictDetector(scene, map, robots, callbacks) {
   // Rebuilds all time-parameterized paths, compares every unique robot pair,
   // then renders and reports results. Does NOT change any robot's behaviour.
   const detectFleetConflicts = () => {
-    const ids = Object.keys(robots);
+    const allIds = Object.keys(robots);
 
-    // Rebuild time paths for all robots
-    ids.forEach((id) => buildTimeParameterizedPath(id));
+    // Rebuild time paths (clears timePath = null if robot status === 'completed')
+    allIds.forEach((id) => buildTimeParameterizedPath(id));
 
-    // Collect conflicts from all unique pairs
+    // Exclude completed robots from conflict pairs
+    const activeIds = allIds.filter((id) => robots[id] && robots[id].status !== 'completed');
+
+    // Collect conflicts from all unique active pairs
     const all = [];
-    for (let i = 0; i < ids.length; i++) {
-      for (let j = i + 1; j < ids.length; j++) {
-        all.push(...detectVertexConflicts(ids[i], ids[j]));
-        all.push(...detectEdgeConflicts(ids[i], ids[j]));
+    for (let i = 0; i < activeIds.length; i++) {
+      for (let j = i + 1; j < activeIds.length; j++) {
+        all.push(...detectVertexConflicts(activeIds[i], activeIds[j]));
+        all.push(...detectEdgeConflicts(activeIds[i], activeIds[j]));
       }
     }
     conflicts = all;

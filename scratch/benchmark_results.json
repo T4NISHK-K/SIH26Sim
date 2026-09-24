@@ -1,0 +1,162 @@
+[
+  {
+    "scenarioName": "Scenario 1: Head-On Corridor Conflict",
+    "timestamp": "2026-09-24T06:31:43.480Z",
+    "baseline": {
+      "collision_events": 1,
+      "near_collision_events": 1,
+      "minimum_separation_m": 0.063,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0,
+      "total_distance_m": 51.414,
+      "energy_proxy": 56.556,
+      "missions_completed": 2,
+      "task_completion_time_sec": 9,
+      "reroute_count": 0
+    },
+    "ares": {
+      "collision_events": 0,
+      "near_collision_events": 0,
+      "minimum_separation_m": 5.038,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0,
+      "total_distance_m": 89.288,
+      "energy_proxy": 98.217,
+      "missions_completed": 2,
+      "task_completion_time_sec": 22.25,
+      "reroute_count": 1
+    },
+    "differencesPct": {
+      "collision_events": -100,
+      "near_collision_events": -100,
+      "minimum_separation_m": 7896.83,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0,
+      "total_distance_m": 73.66,
+      "energy_proxy": 73.66,
+      "missions_completed": 0,
+      "task_completion_time_sec": 147.22,
+      "reroute_count": null
+    }
+  },
+  {
+    "scenarioName": "Scenario 2: Crossing Intersection Conflict",
+    "timestamp": "2026-09-24T06:31:44.911Z",
+    "baseline": {
+      "collision_events": 1,
+      "near_collision_events": 1,
+      "minimum_separation_m": 0.708,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0,
+      "total_distance_m": 42.414,
+      "energy_proxy": 46.656,
+      "missions_completed": 2,
+      "task_completion_time_sec": 7.6,
+      "reroute_count": 0
+    },
+    "ares": {
+      "collision_events": 0,
+      "near_collision_events": 0,
+      "minimum_separation_m": 10.5,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0.472,
+      "total_distance_m": 42.414,
+      "energy_proxy": 46.703,
+      "missions_completed": 2,
+      "task_completion_time_sec": 14.85,
+      "reroute_count": 0
+    },
+    "differencesPct": {
+      "collision_events": -100,
+      "near_collision_events": -100,
+      "minimum_separation_m": 1383.05,
+      "deadlocks": 0,
+      "average_wait_time_sec": null,
+      "total_distance_m": 0,
+      "energy_proxy": 0.1,
+      "missions_completed": 0,
+      "task_completion_time_sec": 95.39,
+      "reroute_count": 0
+    }
+  },
+  {
+    "scenarioName": "Scenario 3: Same-Direction Following Conflict",
+    "timestamp": "2026-09-24T06:31:46.731Z",
+    "baseline": {
+      "collision_events": 1,
+      "near_collision_events": 1,
+      "minimum_separation_m": 0.031,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0,
+      "total_distance_m": 53.414,
+      "energy_proxy": 59.056,
+      "missions_completed": 2,
+      "task_completion_time_sec": 10.85,
+      "reroute_count": 0
+    },
+    "ares": {
+      "collision_events": 0,
+      "near_collision_events": 0,
+      "minimum_separation_m": 5.096,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0,
+      "total_distance_m": 53.414,
+      "energy_proxy": 59.056,
+      "missions_completed": 2,
+      "task_completion_time_sec": 14.35,
+      "reroute_count": 0
+    },
+    "differencesPct": {
+      "collision_events": -100,
+      "near_collision_events": -100,
+      "minimum_separation_m": 16338.71,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0,
+      "total_distance_m": 0,
+      "energy_proxy": 0,
+      "missions_completed": 0,
+      "task_completion_time_sec": 32.26,
+      "reroute_count": 0
+    }
+  },
+  {
+    "scenarioName": "Scenario 4: 4-Robot Congested Intersection",
+    "timestamp": "2026-09-24T06:31:53.235Z",
+    "baseline": {
+      "collision_events": 4,
+      "near_collision_events": 5,
+      "minimum_separation_m": 0,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0,
+      "total_distance_m": 84.828,
+      "energy_proxy": 93.311,
+      "missions_completed": 4,
+      "task_completion_time_sec": 7.6,
+      "reroute_count": 0
+    },
+    "ares": {
+      "collision_events": 0,
+      "near_collision_events": 0,
+      "minimum_separation_m": 3.641,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0,
+      "total_distance_m": 208.828,
+      "energy_proxy": 229.711,
+      "missions_completed": 4,
+      "task_completion_time_sec": 28.6,
+      "reroute_count": 4
+    },
+    "differencesPct": {
+      "collision_events": -100,
+      "near_collision_events": -100,
+      "minimum_separation_m": null,
+      "deadlocks": 0,
+      "average_wait_time_sec": 0,
+      "total_distance_m": 146.18,
+      "energy_proxy": 146.18,
+      "missions_completed": 0,
+      "task_completion_time_sec": 276.32,
+      "reroute_count": null
+    }
+  }
+]
