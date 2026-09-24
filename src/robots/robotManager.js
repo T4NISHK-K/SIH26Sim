@@ -10,6 +10,7 @@
  */
 
 import { DEFAULT_SPEED, ROBOT_DISPLAY_SIZE, ROBOT_PALETTES } from '../config/constants.js';
+import { getOrCreateRobotSocket, disconnectRobotSocket, disconnectAllRobotSockets } from '../network/socketClient.js';
 
 /**
  * Scan the Roads layer and return every tile coordinate that has a tile with index > 0.
@@ -243,6 +244,13 @@ export function registerRobotInFleet(scene, containers, config) {
   // 5. Active tween slot
   containers.activeTweens[id] = null;
 
+  // 6. Establish persistent Socket.IO client for this robot
+  try {
+    getOrCreateRobotSocket(id);
+  } catch (err) {
+    console.warn(`[robotManager] Failed to init socket for ${id}:`, err);
+  }
+
   return robot;
 }
 
@@ -427,5 +435,12 @@ export function removeRobotFromFleet(robotId, containers) {
   // 5. Remove robot state object
   if (containers.robots) {
     delete containers.robots[robotId];
+  }
+
+  // 6. Cleanly disconnect Socket.IO client
+  try {
+    disconnectRobotSocket(robotId);
+  } catch (err) {
+    console.warn(`[robotManager] Failed to disconnect socket for ${robotId}:`, err);
   }
 }

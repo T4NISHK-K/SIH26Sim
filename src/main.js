@@ -46,6 +46,14 @@ import {
   isEdgeConnected,
   buildRobotFeatures
 } from './network/edgeClient.js';
+import {
+  getOrCreateRobotSocket,
+  getNeighbourStates,
+  getRelevantNeighbourStates,
+  getDynamicInteractionRadius,
+  disconnectRobotSocket,
+  disconnectAllRobotSockets
+} from './network/socketClient.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 class WarehouseScene extends Phaser.Scene {
@@ -814,6 +822,54 @@ class WarehouseScene extends Phaser.Scene {
       reroute: 0
     };
 
+    // ── STAGE 5B & 5C: Real-Time Socket.IO Robot State & DIR Relevant Neighbours ─
+    window.getNeighbourStates = getNeighbourStates;
+    window.getRelevantNeighbourStates = getRelevantNeighbourStates;
+    window.getDynamicInteractionRadius = getDynamicInteractionRadius;
+    window.getOrCreateRobotSocket = getOrCreateRobotSocket;
+    window.disconnectRobotSocket = disconnectRobotSocket;
+    window.disconnectAllRobotSockets = disconnectAllRobotSockets;
+
+    this.time.addEvent({
+      delay: 150, // Controlled 150ms interval (100–200ms range)
+      loop: true,
+      callback: () => {
+        for (const [robotId, robot] of Object.entries(robots)) {
+          if (!robot) continue;
+          const sprite = robotSprites[robotId];
+
+          const currentX = sprite ? sprite.x : robot.x;
+          const currentY = sprite ? sprite.y : robot.y;
+          const effectiveSpeed = robot.effectiveSpeed !== undefined ? robot.effectiveSpeed : (robot.speed || 100);
+          const currentHeading = typeof robot.heading === 'number' ? robot.heading : (sprite ? sprite.rotation : 0);
+
+          const statePayload = {
+            robotId: robot.id,
+            x: Number(currentX.toFixed(2)),
+            y: Number(currentY.toFixed(2)),
+            speed: Number((effectiveSpeed > 10 ? effectiveSpeed / 100 : effectiveSpeed).toFixed(2)),
+            heading: Number(currentHeading.toFixed(3)),
+            battery: Number((robot.battery !== undefined ? robot.battery : 100).toFixed(1)),
+            task: robot.task || 'General Transport',
+            priority: robot.priority !== undefined ? robot.priority : 1,
+            status: (robot.status || 'idle').toUpperCase(),
+            destination: robot.destination ? {
+              x: Number((robot.destination.x || 0).toFixed(2)),
+              y: Number((robot.destination.y || 0).toFixed(2)),
+              tileX: robot.destination.tileX,
+              tileY: robot.destination.tileY
+            } : null,
+            timestamp: Date.now()
+          };
+
+          const client = getOrCreateRobotSocket(robotId);
+          if (client) {
+            client.sendState(statePayload);
+          }
+        }
+      }
+    });
+
     const lastTelemetryTimes = new Map();
 
     this.time.addEvent({
@@ -842,8 +898,15 @@ class WarehouseScene extends Phaser.Scene {
           }
           lastTelemetryTimes.set(robotId, now);
 
-          // Convert robot state into 24 ML features and request prediction
-          const features = buildRobotFeatures(robot, robots, currentConflicts, map);
+          // In ARES mode, obtain relevant network neighbours if socket client is connected
+          let networkNeighbours = null;
+          const client = getOrCreateRobotSocket(robotId);
+          if (client && client.isConnected()) {
+            networkNeighbours = client.getRelevantNeighbourStates();
+          }
+
+          // Convert robot state into 26 ML features and request prediction
+          const features = buildRobotFeatures(robot, robots, currentConflicts, map, networkNeighbours);
           predictRobot(robotId, features).catch(() => {});
         }
       }

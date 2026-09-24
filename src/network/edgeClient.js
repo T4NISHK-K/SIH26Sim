@@ -203,9 +203,27 @@ export function mapTaskType(task) {
 function getRobotGridCoords(r, map = null) {
   let gx = 0;
   let gy = 0;
-  if (r.x !== undefined && r.y !== undefined) {
-    gx = (r.x - 16) / 32;
-    gy = (r.y - 16) / 32;
+  if (!r) return { x: 0, y: 0 };
+
+  if (r.tileX !== undefined && r.tileY !== undefined) {
+    gx = r.tileX;
+    gy = r.tileY;
+  } else if (r.x !== undefined && r.y !== undefined) {
+    if (r.coordsInMeters || r.isTileCoord) {
+      gx = r.x;
+      gy = r.y;
+    } else if (Math.abs(r.x) > 60 || Math.abs(r.y) > 40) {
+      gx = (r.x - 16) / 32;
+      gy = (r.y - 16) / 32;
+    } else {
+      if (map && typeof map.worldToTileX === 'function') {
+        gx = map.worldToTileX(r.x);
+        gy = map.worldToTileY(r.y);
+      } else {
+        gx = r.x;
+        gy = r.y;
+      }
+    }
   } else if (map && typeof map.worldToTileX === 'function' && r.x !== undefined && r.y !== undefined) {
     gx = map.worldToTileX(r.x);
     gy = map.worldToTileY(r.y);
@@ -231,7 +249,11 @@ function getRobotGridCoords(r, map = null) {
  * @returns {number} Angle in radians [-PI, PI]
  */
 function computeHeadingRad(robot, currentX, currentY, destX, destY) {
-  if (robot.path && robot.path.length > 0) {
+  if (robot && typeof robot.heading === 'number' && Number.isFinite(robot.heading)) {
+    return normalizeAngle(robot.heading);
+  }
+
+  if (robot && robot.path && robot.path.length > 0) {
     let startIndex = 0;
     if (typeof robot.waypointIndex === 'number' && robot.waypointIndex >= 0) {
       startIndex = robot.waypointIndex;
@@ -280,6 +302,29 @@ function computeHeadingRad(robot, currentX, currentY, destX, destY) {
   return 0.0;
 }
 
+// ── Dynamic Interaction Radius (DIR) Configuration & Calculation ───────────────
+export const DIR_CONFIG = {
+  R_MIN: 5.0,
+  R_MAX: 20.0,
+  TAU_REACT: 1.5,
+  BETA_DENSITY: 1.0,
+  DENSITY_RADIUS: 8.0
+};
+
+/**
+ * Computes Dynamic Interaction Radius (DIR) according to ARES V2 formulation:
+ * R_i(t) = clip(R_min + tau_react * speed + beta_density * rho, R_min, R_max)
+ *
+ * @param {number} speedMps
+ * @param {number} [localDensityCount=0]
+ * @returns {number} Dynamic interaction radius in meters
+ */
+export function computeDynamicInteractionRadius(speedMps, localDensityCount = 0) {
+  const { R_MIN, R_MAX, TAU_REACT, BETA_DENSITY } = DIR_CONFIG;
+  const rawDir = R_MIN + Math.max(speedMps, 0.0) * TAU_REACT + BETA_DENSITY * Math.max(localDensityCount, 0);
+  return Math.min(R_MAX, Math.max(R_MIN, rawDir));
+}
+
 /**
  * Convert existing robot state, fleet context, and conflicts into the exact 26 ARES V2 ML features.
  *
@@ -294,26 +339,33 @@ function computeHeadingRad(robot, currentX, currentY, destX, destY) {
  * - No-neighbor defaults: d_near = 99.0, ttc = 99.0, cpa_d = 99.0, cpa_t = 0.0, rel_spd = 0.0, rel_dir = 'NONE'
  *
  * @param {object} robot - Current robot state object
- * @param {Object.<string, object>} allRobots - Entire fleet dictionary
+ * @param {Object.<string, object>} allRobots - Entire fleet dictionary (fallback peer source)
  * @param {Array<object>} conflicts - Active detected conflicts list
  * @param {Phaser.Tilemaps.Tilemap} [map] - Tilemap for coordinate conversions
+ * @param {Object.<string, object>|Array<object>|Map} [networkNeighbours=null] - Stage 5C network relevant neighbours
  * @returns {object} 26 ARES V2 ML feature object
  */
-export function buildRobotFeatures(robot, allRobots = {}, conflicts = [], map = null) {
+export function buildRobotFeatures(robot, allRobots = {}, conflicts = [], map = null, networkNeighbours = null) {
   // 1. Current Coordinates (tiles/meters)
   const curr = getRobotGridCoords(robot, map);
   const currentTileX = curr.x;
   const currentTileY = curr.y;
 
   // 2. Destination Coordinates (tiles/meters)
-  const destTileX = robot.destination ? robot.destination.tileX : currentTileX;
-  const destTileY = robot.destination ? robot.destination.tileY : currentTileY;
+  const destTileX = robot.destination
+    ? (robot.destination.tileX !== undefined ? robot.destination.tileX : (robot.destination.x !== undefined ? (Math.abs(robot.destination.x) > 60 ? (robot.destination.x - 16) / 32 : robot.destination.x) : currentTileX))
+    : currentTileX;
+  const destTileY = robot.destination
+    ? (robot.destination.tileY !== undefined ? robot.destination.tileY : (robot.destination.y !== undefined ? (Math.abs(robot.destination.y) > 40 ? (robot.destination.y - 16) / 32 : robot.destination.y) : currentTileY))
+    : currentTileY;
 
   // 3. Distance to Destination & Speed (m/s)
   const distToDest = Math.hypot(destTileX - currentTileX, destTileY - currentTileY);
   const speedMps = robot.effectiveSpeed !== undefined
-    ? Number((robot.effectiveSpeed / 100).toFixed(2))
-    : (robot.speed ? Number((robot.speed / 100).toFixed(2)) : 1.0);
+    ? (robot.effectiveSpeed > 10 ? Number((robot.effectiveSpeed / 100).toFixed(2)) : Number(robot.effectiveSpeed.toFixed(2)))
+    : (typeof robot.speed === 'number'
+        ? (robot.speed > 10 ? Number((robot.speed / 100).toFixed(2)) : Number(robot.speed.toFixed(2)))
+        : 1.0);
 
   // 4. Heading in radians [-PI, PI]
   const headingRad = computeHeadingRad(robot, currentTileX, currentTileY, destTileX, destTileY);
@@ -325,28 +377,50 @@ export function buildRobotFeatures(robot, allRobots = {}, conflicts = [], map = 
   const batteryPct = robot.battery !== undefined ? Number(robot.battery) : 100.0;
 
   // 7. Dynamic Interaction Radius (DIR) & Local Fleet Density
-  const R_MIN = 5.0;
-  const R_MAX = 20.0;
-  const TAU_REACT = 1.5;
-  const BETA_DENSITY = 1.0;
-  const DENSITY_RADIUS = 8.0;
+  // Use network neighbour state as source of peer state when available, with safe fallback to in-process allRobots
+  let candidatePeers = [];
+  const peerDict = {};
+
+  if (networkNeighbours !== null && networkNeighbours !== undefined) {
+    const entries = Array.isArray(networkNeighbours)
+      ? networkNeighbours.map((p) => [p?.robotId || p?.id, p])
+      : (networkNeighbours instanceof Map
+          ? Array.from(networkNeighbours.entries())
+          : Object.entries(networkNeighbours));
+
+    for (const [key, peer] of entries) {
+      if (!peer) continue;
+      const pid = peer.robotId || peer.id || key;
+      if (pid === robot.id) continue;
+      if (peer.status && String(peer.status).toLowerCase() === 'completed') continue;
+      peerDict[pid] = peer;
+      candidatePeers.push({ id: pid, obj: peer });
+    }
+  } else {
+    for (const [otherId, other] of Object.entries(allRobots)) {
+      if (!other || otherId === robot.id || (other.status && String(other.status).toLowerCase() === 'completed')) continue;
+      peerDict[otherId] = other;
+      candidatePeers.push({ id: otherId, obj: other });
+    }
+  }
 
   let rho = 0;
   const otherRobotsList = [];
 
-  for (const [otherId, other] of Object.entries(allRobots)) {
-    if (!other || otherId === robot.id || other.status === 'completed') continue;
-    const otherCoords = getRobotGridCoords(other, map);
-    const dist = Math.hypot(otherCoords.x - currentTileX, otherCoords.y - currentTileY);
-    if (dist <= DENSITY_RADIUS) {
+  for (const { id: peerId, obj: peer } of candidatePeers) {
+    const peerCoords = getRobotGridCoords(peer, map);
+    const dist = typeof peer.distance_to_robot_m === 'number'
+      ? peer.distance_to_robot_m
+      : Math.hypot(peerCoords.x - currentTileX, peerCoords.y - currentTileY);
+
+    if (dist <= DIR_CONFIG.DENSITY_RADIUS) {
       rho++;
     }
-    otherRobotsList.push({ otherId, other, coords: otherCoords, dist });
+    otherRobotsList.push({ otherId: peerId, other: peer, coords: peerCoords, dist });
   }
 
   // DIR Formula: clip(r_min + tau_react * speed + beta_density * rho, r_min, r_max)
-  const rawDir = R_MIN + Math.max(speedMps, 0.0) * TAU_REACT + BETA_DENSITY * Math.max(rho, 0);
-  const dynamicInteractionRadiusM = Math.min(R_MAX, Math.max(R_MIN, rawDir));
+  const dynamicInteractionRadiusM = computeDynamicInteractionRadius(speedMps, rho);
 
   // 8. Neighbor Filtering strictly inside DIR
   const neighbors = otherRobotsList.filter((item) => item.dist <= dynamicInteractionRadiusM);
@@ -364,8 +438,8 @@ export function buildRobotFeatures(robot, allRobots = {}, conflicts = [], map = 
     ? conflicts.filter((c) => {
         if (!c || (c.robotA !== robot.id && c.robotB !== robot.id)) return false;
         const otherId = c.robotA === robot.id ? c.robotB : c.robotA;
-        const other = allRobots[otherId];
-        return !other || other.status !== 'completed';
+        const other = peerDict[otherId] || (allRobots && allRobots[otherId]);
+        return !other || (other.status && String(other.status).toLowerCase() !== 'completed');
       })
     : [];
 
@@ -391,12 +465,19 @@ export function buildRobotFeatures(robot, allRobots = {}, conflicts = [], map = 
     const dist = nearestItem.dist;
     nearestRobotDistanceM = Number(dist.toFixed(3));
 
-    const otherDestX = nearestOther.destination ? nearestOther.destination.tileX : nearestItem.coords.x;
-    const otherDestY = nearestOther.destination ? nearestOther.destination.tileY : nearestItem.coords.y;
+    const otherDestX = nearestOther.destination
+      ? (nearestOther.destination.tileX !== undefined ? nearestOther.destination.tileX : (nearestOther.destination.x !== undefined ? (Math.abs(nearestOther.destination.x) > 60 ? (nearestOther.destination.x - 16) / 32 : nearestOther.destination.x) : nearestItem.coords.x))
+      : nearestItem.coords.x;
+    const otherDestY = nearestOther.destination
+      ? (nearestOther.destination.tileY !== undefined ? nearestOther.destination.tileY : (nearestOther.destination.y !== undefined ? (Math.abs(nearestOther.destination.y) > 40 ? (nearestOther.destination.y - 16) / 32 : nearestOther.destination.y) : nearestItem.coords.y))
+      : nearestItem.coords.y;
+
     const otherHeadingRad = computeHeadingRad(nearestOther, nearestItem.coords.x, nearestItem.coords.y, otherDestX, otherDestY);
     const otherSpeedMps = nearestOther.effectiveSpeed !== undefined
-      ? Number((nearestOther.effectiveSpeed / 100).toFixed(2))
-      : (nearestOther.speed ? Number((nearestOther.speed / 100).toFixed(2)) : 1.0);
+      ? (nearestOther.effectiveSpeed > 10 ? Number((nearestOther.effectiveSpeed / 100).toFixed(2)) : Number(nearestOther.effectiveSpeed.toFixed(2)))
+      : (typeof nearestOther.speed === 'number'
+          ? (nearestOther.speed > 10 ? Number((nearestOther.speed / 100).toFixed(2)) : Number(nearestOther.speed.toFixed(2)))
+          : 1.0);
 
     // Vector kinematics
     const rx = nearestItem.coords.x - currentTileX;
