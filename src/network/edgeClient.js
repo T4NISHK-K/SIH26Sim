@@ -7,6 +7,8 @@
  * and window.edgeDecisionStats.
  */
 
+import logger from '../utils/logger.js';
+
 const EDGE_BASE_URL = 'http://127.0.0.1:3001';
 
 // Initialise global state containers
@@ -73,6 +75,7 @@ export function isEdgeConnected() {
  * @returns {Promise<{ decision: string, confidence: number, timestamp: number } | null>}
  */
 export async function predictRobot(robotId, features, baseUrl = EDGE_BASE_URL) {
+  const startTime = Date.now();
   try {
     const res = await fetch(`${baseUrl}/predict`, {
       method: 'POST',
@@ -86,8 +89,10 @@ export async function predictRobot(robotId, features, baseUrl = EDGE_BASE_URL) {
       })
     });
 
+    const latency = Date.now() - startTime;
+
     if (!res.ok) {
-      console.warn(`[EdgeClient] Predict request failed with status ${res.status}`);
+      logger.error('ERROR', `predictor request failed with status ${res.status}`);
       return null;
     }
 
@@ -97,6 +102,8 @@ export async function predictRobot(robotId, features, baseUrl = EDGE_BASE_URL) {
       confidence: typeof data.confidence === 'number' ? data.confidence : 0,
       timestamp: Date.now()
     };
+
+    logger.info('ML', `${robotId} decision=${result.decision} confidence=${result.confidence.toFixed(2)} latency=${latency}ms`);
 
     if (typeof window !== 'undefined') {
       if (!window.robotDecisionState) {
@@ -124,7 +131,7 @@ export async function predictRobot(robotId, features, baseUrl = EDGE_BASE_URL) {
 
     return result;
   } catch (err) {
-    console.warn(`[EdgeClient] Predict error for ${robotId}:`, err.message);
+    logger.error('ERROR', `predictor request failed: ${err.message}`);
     return null;
   }
 }
@@ -607,6 +614,15 @@ export function buildRobotFeatures(robot, allRobots = {}, conflicts = [], map = 
       );
     }
   }
+
+  // Observational logging (summary values only, throttled to prevent frame spam)
+  const rId = robot.id || robot.robotId || 'R?';
+  logger.throttled(
+    `${rId}-FEATURE`,
+    2000,
+    'FEATURE',
+    `${rId} nearby=${nearbyRobotCount} dist=${nearestRobotDistanceM.toFixed(2)}m TTC=${trueTtcSec.toFixed(2)} CPA=${cpaDistanceM.toFixed(2)} conflict=${intersectionConflict}`
+  );
 
   return features;
 }

@@ -21,3 +21,6 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+
+# ─── Local Scratch & Development Tests ────────────────────────────────────────
+scratch/

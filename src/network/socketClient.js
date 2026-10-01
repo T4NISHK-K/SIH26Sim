@@ -17,6 +17,7 @@
 
 import { io } from 'socket.io-client';
 import { DIR_CONFIG, computeDynamicInteractionRadius } from './edgeClient.js';
+import logger from '../utils/logger.js';
 
 const DEFAULT_SERVER_URL = 'http://127.0.0.1:3001';
 export const STALE_TIMEOUT_MS = 10000;
@@ -86,16 +87,18 @@ export class RobotSocketClient {
       this.socket.on('connect', () => {
         this.connected = true;
         this.hasWarnedError = false;
+        logger.info('SOCKET', `${this.robotId} connected`);
       });
 
       this.socket.on('disconnect', () => {
         this.connected = false;
+        logger.info('SOCKET', `${this.robotId} disconnected`);
       });
 
       this.socket.on('connect_error', (err) => {
         this.connected = false;
         if (!this.hasWarnedError) {
-          console.warn(`[SocketClient] Edge coordinator unreachable for ${this.robotId}: ${err.message}`);
+          logger.warn('SOCKET', `${this.robotId} connection error: ${err.message}`);
           this.hasWarnedError = true;
         }
       });
@@ -106,18 +109,20 @@ export class RobotSocketClient {
             ...data,
             localReceivedAt: Date.now()
           });
+          logger.debug('SOCKET', `${this.robotId} received NEIGHBOUR_STATE from ${data.robotId}`);
         }
       });
 
       this.socket.on('ROBOT_DISCONNECTED', (data) => {
         if (data && data.robotId) {
           this.neighbourStates.delete(data.robotId);
+          logger.info('SOCKET', `${this.robotId} removed disconnected robot ${data.robotId}`);
         }
       });
     } catch (err) {
       this.connected = false;
       if (!this.hasWarnedError) {
-        console.warn(`[SocketClient] Error creating socket for ${this.robotId}: ${err.message}`);
+        logger.error('SOCKET', `${this.robotId} error creating socket: ${err.message}`);
         this.hasWarnedError = true;
       }
     }
@@ -157,6 +162,8 @@ export class RobotSocketClient {
         return false;
       }
 
+      logger.debug('SOCKET', `${this.robotId} STATE_UPDATE`);
+
       if (typeof ackCallback === 'function') {
         this.socket.emit('STATE_UPDATE', payload, ackCallback);
       } else {
@@ -164,7 +171,7 @@ export class RobotSocketClient {
       }
       return true;
     } catch (err) {
-      console.warn(`[SocketClient] Failed to emit STATE_UPDATE for ${this.robotId}: ${err.message}`);
+      logger.warn('SOCKET', `Failed to emit STATE_UPDATE for ${this.robotId}: ${err.message}`);
       if (typeof ackCallback === 'function') {
         ackCallback({ success: false, error: err.message });
       }
@@ -284,6 +291,22 @@ export class RobotSocketClient {
         };
       }
     }
+
+    // Observational logging (throttled to avoid console flooding)
+    logger.throttled(
+      `${this.robotId}-DIR`,
+      2000,
+      'DIR',
+      `${this.robotId} radius=${dirRadius.toFixed(1)}m density=${rho}`
+    );
+
+    const relKeys = Object.keys(relevant);
+    logger.throttled(
+      `${this.robotId}-NEIGHBOUR`,
+      2000,
+      'NEIGHBOUR',
+      `${this.robotId} relevant=[${relKeys.join(',')}]`
+    );
 
     return relevant;
   }

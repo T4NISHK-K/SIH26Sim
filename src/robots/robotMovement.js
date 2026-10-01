@@ -18,6 +18,7 @@
 
 import { assessTemporalResolution } from '../coordination/conflictDetection.js';
 import { selectAdaptiveIntervention, arbitrateConflictRoles, getRobotPriorityRank } from '../coordination/adaptiveIntervention.js';
+import logger from '../utils/logger.js';
 
 const DECISION_MAX_AGE_MS = 3000;
 const REROUTE_COOLDOWN_MS = 1500;
@@ -53,6 +54,7 @@ function getEffectiveDecision(robotId, runMode) {
 
   // Validate that decision is one of the 4 valid ARES V2 classes
   if (!VALID_DECISIONS.includes(record.decision)) {
+    logger.warn('FALLBACK', `${robotId} invalid decision '${record.decision}', fallback to MOVE`);
     return { decision: 'MOVE', isFresh: false, raw: record };
   }
 
@@ -60,12 +62,14 @@ function getEffectiveDecision(robotId, runMode) {
   const age = now - (record.timestamp || 0);
 
   if (age > DECISION_MAX_AGE_MS) {
+    logger.throttled(`${robotId}-stale-fallback`, 5000, 'FALLBACK', `${robotId} stale decision (${age}ms), fallback to MOVE`);
     return { decision: 'MOVE', isFresh: false, raw: record };
   }
 
   // Optimized movement applies ML decisions when confidence >= 0.50 (or when confidence is omitted/valid)
   const confidence = typeof record.confidence === 'number' ? record.confidence : 1.0;
   if (confidence < 0.50) {
+    logger.throttled(`${robotId}-low-conf-fallback`, 5000, 'FALLBACK', `${robotId} low confidence (${confidence.toFixed(2)}), fallback to MOVE`);
     return { decision: 'MOVE', isFresh: true, raw: record };
   }
 
@@ -118,7 +122,8 @@ export function createMovementController(scene, map, robots, robotSprites, activ
         consecutiveWaitCount: 0,
         mlDecision: 'MOVE',
         finalDecision: 'MOVE',
-        decisionReason: 'Nominal operation'
+        decisionReason: 'Nominal operation',
+        lastLoggedAction: null
       });
     }
     return localCoordinationState.get(robotId);
@@ -162,6 +167,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
     coord.waitStartedAt = null;
     coord.consecutiveWaitCount = 0;
     coord.effectiveSpeed = r.speed || 100;
+    coord.lastLoggedAction = null;
     syncDebugState(robotId);
 
     if (r.destination) {
@@ -486,6 +492,8 @@ export function createMovementController(scene, map, robots, robotSprites, activ
     }
     syncDebugState(robotId);
 
+    logger.info('SAFETY', `${robotId} WAIT pause`);
+
     // Clear existing timer if any
     if (coord.waitTimerEvent) {
       coord.waitTimerEvent.remove();
@@ -581,6 +589,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
             coord.consecutiveWaitCount = 0;
             coord.applied = true;
             syncDebugState(robotId);
+            logger.info('SAFETY', `${robotId} mutual wait spatial reroute applied`);
             if (typeof callbacks.updatePathVisualization === 'function') {
               callbacks.updatePathVisualization(robotId);
             }
@@ -658,6 +667,8 @@ export function createMovementController(scene, map, robots, robotSprites, activ
           : 'Coordination re-evaluation: progressing robot released to prevent deadlock';
         coord.applied = true;
         syncDebugState(robotId);
+
+        logger.info('SAFETY', `${robotId} WAIT release`);
 
         moveRobotToNextWaypoint(robotId, waypointIndex);
       }
@@ -767,6 +778,12 @@ export function createMovementController(scene, map, robots, robotSprites, activ
             coord.lastAppliedAt = now;
             syncDebugState(robotId);
 
+            if (coord.lastLoggedAction !== 'REROUTE') {
+              coord.lastLoggedAction = 'REROUTE';
+              const confStr = raw?.confidence !== undefined ? ` confidence=${raw.confidence.toFixed(2)}` : '';
+              logger.info('ACTION', `${robotId} decision=REROUTE${confStr}`);
+            }
+
             if (typeof callbacks.updatePathVisualization === 'function') {
               callbacks.updatePathVisualization(robotId);
             }
@@ -777,6 +794,7 @@ export function createMovementController(scene, map, robots, robotSprites, activ
             return;
           } else {
             // Fallback: If conflict affects trajectory but no alternate path exists, WAIT
+            logger.info('FALLBACK', `${robotId} no alternate route for REROUTE, fallback to WAIT`);
             coord.lastRerouteAt = now;
             activeDecision = 'WAIT';
           }
@@ -786,6 +804,11 @@ export function createMovementController(scene, map, robots, robotSprites, activ
 
     // ── WAIT Handling ──────────────────────────────────────────────────────────
     if (activeDecision === 'WAIT') {
+      if (coord.lastLoggedAction !== 'WAIT') {
+        coord.lastLoggedAction = 'WAIT';
+        const confStr = raw?.confidence !== undefined ? ` confidence=${raw.confidence.toFixed(2)}` : '';
+        logger.info('ACTION', `${robotId} decision=WAIT${confStr}`);
+      }
       enterWaitState(robotId, waypointIndex, runMode);
       return;
     }
@@ -810,6 +833,12 @@ export function createMovementController(scene, map, robots, robotSprites, activ
     coord.waitStartedAt = null;
     coord.lastAppliedAt = Date.now();
     syncDebugState(robotId);
+
+    if (coord.lastLoggedAction !== activeDecision) {
+      coord.lastLoggedAction = activeDecision;
+      const confStr = raw?.confidence !== undefined ? ` confidence=${raw.confidence.toFixed(2)}` : '';
+      logger.info('ACTION', `${robotId} decision=${activeDecision}${confStr}`);
+    }
 
     const targetTile = r.path[waypointIndex];
     const targetWorldX = targetTile.worldX !== undefined ? targetTile.worldX : (map.tileToWorldX(targetTile.tileX) + 16);
